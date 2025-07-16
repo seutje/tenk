@@ -14,6 +14,7 @@ let gameSpeed = 1;
 let isPaused = false;
 let generation = 1;
 let frameCount = 0;
+let isTraining = false;
 
 // Neural Network parameters
 const INPUT_SIZE = 13;
@@ -271,14 +272,16 @@ class Tank {
         }
         
         // Add damage particles
-        for (let i = 0; i < 5; i++) {
-            particles.push(new Particle(
-                this.x + TANK_WIDTH/2 + (Math.random() - 0.5) * TANK_WIDTH,
-                this.y - TANK_HEIGHT/2,
-                (Math.random() - 0.5) * 5,
-                -Math.random() * 5,
-                '#ff4444'
-            ));
+        if (typeof requestAnimationFrame === 'function' && !isTraining) {
+            for (let i = 0; i < 5; i++) {
+                particles.push(new Particle(
+                    this.x + TANK_WIDTH/2 + (Math.random() - 0.5) * TANK_WIDTH,
+                    this.y - TANK_HEIGHT/2,
+                    (Math.random() - 0.5) * 5,
+                    -Math.random() * 5,
+                    '#ff4444'
+                ));
+            }
         }
     }
     
@@ -321,6 +324,9 @@ function getTerrainY(x) {
     if (!Number.isFinite(x)) {
         return canvas.height;
     }
+
+    if (x < 0) return terrain[0].y;
+    if (x > canvas.width) return terrain[terrain.length - 1].y;
 
     const index = Math.floor((x / canvas.width) * TERRAIN_POINTS);
     if (index < 0 || index >= terrain.length) return canvas.height;
@@ -413,14 +419,16 @@ class Projectile {
         });
         
         // Add explosion particles
-        for (let i = 0; i < 10; i++) {
-            particles.push(new Particle(
-                x + (Math.random() - 0.5) * destroyRadius * 2,
-                y + (Math.random() - 0.5) * destroyRadius * 2,
-                (Math.random() - 0.5) * 10,
-                -Math.random() * 10,
-                '#ff6600'
-            ));
+        if (typeof requestAnimationFrame === 'function' && !isTraining) {
+            for (let i = 0; i < 10; i++) {
+                particles.push(new Particle(
+                    x + (Math.random() - 0.5) * destroyRadius * 2,
+                    y + (Math.random() - 0.5) * destroyRadius * 2,
+                    (Math.random() - 0.5) * 10,
+                    -Math.random() * 10,
+                    '#ff6600'
+                ));
+            }
         }
     }
     
@@ -445,24 +453,26 @@ class Projectile {
             }
         });
         
-        const animateExplosion = () => {
-            explosion.radius += 2;
-            explosion.alpha -= 0.05;
+        if (typeof requestAnimationFrame === 'function' && !isTraining) {
+            const animateExplosion = () => {
+                explosion.radius += 2;
+                explosion.alpha -= 0.05;
+                
+                if (explosion.alpha > 0) {
+                    requestAnimationFrame(animateExplosion);
+                }
+                
+                ctx.save();
+                ctx.globalAlpha = explosion.alpha;
+                ctx.fillStyle = '#ff6600';
+                ctx.beginPath();
+                ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            };
             
-            if (explosion.alpha > 0) {
-                requestAnimationFrame(animateExplosion);
-            }
-            
-            ctx.save();
-            ctx.globalAlpha = explosion.alpha;
-            ctx.fillStyle = '#ff6600';
-            ctx.beginPath();
-            ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        };
-        
-        animateExplosion();
+            animateExplosion();
+        }
     }
     
     draw() {
@@ -533,6 +543,8 @@ function initGame() {
 
 // Training simulation
 function simulateTraining() {
+    isTraining = true;
+
     if (!globalBestModel) {
         globalBestModel = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
     }
@@ -542,62 +554,80 @@ function simulateTraining() {
 
     const fitnessScores = trainingPool.map(brain => {
         let totalFitness = 0;
-        for (let i = 0; i < 5; i++) { // 5 evaluation rounds
-            const simTanks = [
-                new Tank(100, 300, '#ff4444', 1),
-                new Tank(300, 300, '#44ff44', 2),
-                new Tank(500, 300, '#4444ff', 3),
-                new Tank(700, 300, '#ffff44', 4)
-            ];
+        const evaluationRounds = 5;
+
+        for (let i = 0; i < evaluationRounds; i++) {
+            // Store original game state
+            const originalTanks = tanks;
+            const originalProjectiles = projectiles;
+            const originalTerrain = terrain;
+
+            // Setup simulation environment
+            generateTerrain();
+            const simTanks = [];
+            const colors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44'];
+            for (let j = 0; j < 4; j++) {
+                const x = (j + 1) * canvas.width / 5 - TANK_WIDTH / 2;
+                const y = getTerrainY(x);
+                simTanks.push(new Tank(x, y, colors[j], j + 1));
+            }
 
             const mainTank = simTanks[0];
             mainTank.brain.copyFrom(brain);
-            mainTank.fitness = 0; // Reset fitness for each evaluation
 
             simTanks.slice(1).forEach(otherTank => {
-                otherTank.brain.copyFrom(trainingPool[Math.floor(Math.random() * trainingPool.length)]);
+                const randomBrain = trainingPool[Math.floor(Math.random() * trainingPool.length)];
+                otherTank.brain.copyFrom(randomBrain);
             });
 
-            for (let round = 0; round < 5; round++) {
-                simTanks.forEach(tank => {
-                    if (tank.alive) {
-                        const inputs = [
-                            tank.x, tank.y,
-                            ...simTanks.filter(t => t.id !== tank.id).flatMap(t => [t.x, t.y, t.alive ? 1 : 0]),
-                            terrainFreq, terrainAmp
-                        ];
-                        const outputs = tank.brain.forward(inputs);
-                        tank.angle = (outputs[0] - 0.5) * Math.PI;
-                        tank.power = outputs[1] * MAX_POWER;
+            tanks = simTanks;
+            projectiles = [];
 
-                        const target = simTanks.find(t => t.id !== tank.id && t.alive);
-                        if (target) {
-                            const distance = Math.sqrt(Math.pow(target.x - tank.x, 2) + Math.pow(target.y - tank.y, 2));
-                            const angleToTarget = Math.atan2(target.y - tank.y, target.x - tank.x);
-                            const angleDiff = Math.abs(angleToTarget - tank.angle);
-                            let fitness = Math.max(0, (canvas.width - distance) - (angleDiff * 100));
-                            tank.fitness += fitness;
-                        }
-                    }
-                });
+            // Run simulation for a fixed number of frames or until the game ends
+            const maxFrames = 1800; // 30 seconds
+            for (let frame = 0; frame < maxFrames; frame++) {
+                if (frame % 60 === 0) {
+                    tanks.forEach(tank => tank.think());
+                    tanks.forEach(tank => tank.fire());
+                }
+
+                projectiles.forEach(p => p.update());
+                projectiles = projectiles.filter(p => p.active);
+
+                const aliveTanks = tanks.filter(t => t.alive);
+                if (aliveTanks.length <= 1) {
+                    // Award bonus for survival
+                    aliveTanks.forEach(tank => tank.fitness += 50);
+                    break;
+                }
             }
+            
             totalFitness += mainTank.fitness;
+
+            // Restore original game state
+            tanks = originalTanks;
+            projectiles = originalProjectiles;
+            terrain = originalTerrain;
         }
-        return { fitness: totalFitness / 5, brain };
+        
+        return { fitness: totalFitness / evaluationRounds, brain };
     });
 
     fitnessScores.sort((a, b) => b.fitness - a.fitness);
 
-    generationBestFitness = fitnessScores[0].fitness;
-    generationBestBrain.copyFrom(fitnessScores[0].brain);
+    if (fitnessScores.length > 0 && fitnessScores[0].fitness > generationBestFitness) {
+        generationBestFitness = fitnessScores[0].fitness;
+        generationBestBrain.copyFrom(fitnessScores[0].brain);
+    }
 
     if (generationBestFitness > globalBestFitness) {
         globalBestFitness = generationBestFitness;
         globalBestModel.copyFrom(generationBestBrain);
     }
     
+    isTraining = false;
     return { bestFitness: generationBestFitness, bestBrain: generationBestBrain };
-}
+}""
 
 function trainCLI(generations = 10) {
     if (!globalBestModel) {
