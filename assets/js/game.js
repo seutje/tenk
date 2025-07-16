@@ -47,6 +47,26 @@ const WEAPONS = {
     },
 };
 
+let trainedNet = null;
+
+function loadTrainedNet() {
+    if (typeof window === 'undefined') {
+        try {
+            trainedNet = require('../trained_net.json');
+        } catch (e) {
+            trainedNet = null;
+        }
+        return Promise.resolve();
+    } else {
+        return fetch('trained_net.json')
+            .then((r) => r.json())
+            .then((j) => {
+                trainedNet = j;
+            })
+            .catch(() => {});
+    }
+}
+
 // Generate a random neural network for an AI tank
 function createRandomNet() {
     const rand = () => Math.random() * 2 - 1; // range [-1, 1]
@@ -135,7 +155,11 @@ function createTanks() {
             color: colors[i],
             ai: !!i,
             sensors: { front: 0, back: 0, enemy: 0 },
-            aiNet: i ? createRandomNet() : null,
+            aiNet: i
+                ? trainedNet
+                    ? JSON.parse(JSON.stringify(trainedNet))
+                    : createRandomNet()
+                : null,
         });
     }
     placeTanks();
@@ -451,7 +475,10 @@ if (typeof module !== 'undefined') {
         createRandomNet,
         neuralDecision,
         GRAVITY,
+        loadTrainedNet,
     };
 } else {
-    window.onload = init;
+    window.onload = () => {
+        loadTrainedNet().then(init);
+    };
 }
