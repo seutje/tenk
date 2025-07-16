@@ -7,6 +7,10 @@ const TANK_WIDTH = 40;
 const TANK_HEIGHT = 20;
 const HIDDEN_WEIGHTS = 13;
 const INPUT_SIZE = 8;
+const DEFAULT_TERRAIN_AMPLITUDE = 70;
+const DEFAULT_TERRAIN_FREQUENCY = 0.5;
+let currentAmplitude = DEFAULT_TERRAIN_AMPLITUDE;
+let currentFrequency = DEFAULT_TERRAIN_FREQUENCY;
 
 const WEAPONS = {
     standard: {
@@ -164,15 +168,22 @@ function mutate(net) {
     nn.mutate();
 }
 
-function generateTrainingTerrain(width = 800, height = 600) {
+function generateTrainingTerrain(
+    width = 800,
+    height = 600,
+    amplitude = DEFAULT_TERRAIN_AMPLITUDE,
+    frequency = DEFAULT_TERRAIN_FREQUENCY,
+) {
     const terrain = [];
     const segments = Math.floor(width / 10);
     const base = height - GROUND_HEIGHT;
     for (let i = 0; i <= segments; i++) {
         const x = i * 10;
-        const y = base - Math.sin(i * 0.5) * 70 - Math.random() * 20;
+        const y = base - Math.sin(i * frequency) * amplitude - Math.random() * 20;
         terrain.push({ x, y });
     }
+    terrain.amplitude = amplitude;
+    terrain.frequency = frequency;
     return terrain;
 }
 
@@ -190,7 +201,9 @@ function getTrainingTerrainHeight(terrain, x, width = 800) {
 
 function simulateShot(net, enemyX, terrain = generateTrainingTerrain()) {
     const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
-    const inputs = [enemyX / 800, 0, 0, 0, 0, 0, enemyX / 800, 0];
+    const amp = terrain.amplitude || DEFAULT_TERRAIN_AMPLITUDE;
+    const freq = terrain.frequency || DEFAULT_TERRAIN_FREQUENCY;
+    const inputs = [enemyX / 800, 0, amp / 100, freq, 0, 0, enemyX / 800, 0];
     const { angle, power, weapon } = nn.decide(inputs);
     const rad = (angle * Math.PI) / 180;
     const w = WEAPONS[weapon];
@@ -366,15 +379,19 @@ function resize() {
     canvas.height = window.innerHeight - 260;
 }
 
-function generateTerrain() {
+function generateTerrain(amplitude = DEFAULT_TERRAIN_AMPLITUDE, frequency = DEFAULT_TERRAIN_FREQUENCY) {
+    currentAmplitude = amplitude;
+    currentFrequency = frequency;
     terrain = [];
     const segments = Math.floor(canvas.width / 10);
     const base = canvas.height - GROUND_HEIGHT;
     for (let i = 0; i <= segments; i++) {
         const x = i * 10;
-        const y = base - Math.sin(i * 0.5) * 70 - Math.random() * 20;
+        const y = base - Math.sin(i * frequency) * amplitude - Math.random() * 20;
         terrain.push({ x, y });
     }
+    terrain.amplitude = amplitude;
+    terrain.frequency = frequency;
 }
 
 function createTanks(player = true) {
@@ -396,7 +413,7 @@ function createTanks(player = true) {
             alive: true,
             color: colors[i],
             ai: !isPlayer,
-            sensors: { front: 0, back: 0, selfX: 0, selfY: 0, enemyX: 0, enemyY: 0 },
+            sensors: { amplitude: 0, frequency: 0, selfX: 0, selfY: 0, enemyX: 0, enemyY: 0 },
             aiNet: !isPlayer
                 ? trainedNet
                     ? trainedNet.clone()
@@ -486,8 +503,8 @@ function makeAIDecision(id) {
     const inputs = [
         dx / canvas.width,
         dy / canvas.height,
-        tank.sensors.front,
-        tank.sensors.back,
+        tank.sensors.amplitude,
+        tank.sensors.frequency,
         tank.sensors.selfX,
         tank.sensors.selfY,
         tank.sensors.enemyX,
@@ -562,11 +579,8 @@ function getTerrainHeight(x) {
 }
 
 function updateSensors(tank) {
-    const base = getTerrainHeight(tank.x);
-    const front = getTerrainHeight(tank.x + 20);
-    const back = getTerrainHeight(tank.x - 20);
-    tank.sensors.front = (front - base) / 50;
-    tank.sensors.back = (back - base) / 50;
+    tank.sensors.amplitude = currentAmplitude / 100;
+    tank.sensors.frequency = currentFrequency;
     tank.sensors.selfX = tank.x / canvas.width;
     tank.sensors.selfY = tank.y / canvas.height;
     const others = tanks.filter((t) => t.id !== tank.id && t.alive);
