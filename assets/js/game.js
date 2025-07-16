@@ -2,7 +2,7 @@
 const GRAVITY = 0.2;
 const TURN_TIME = 30;
 const DEMO_TURN_TIME = 1;
-const GROUND_HEIGHT = 50;
+const GROUND_HEIGHT = 100;
 const TANK_WIDTH = 40;
 const TANK_HEIGHT = 20;
 
