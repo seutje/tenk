@@ -216,12 +216,15 @@ class Tank {
             x: Math.cos(this.angle) * this.power,
             y: Math.sin(this.angle) * this.power
         };
+
+        const barrelTipX = this.x + TANK_WIDTH / 2 + Math.cos(this.angle) * 31;
+        const barrelTipY = this.y - TANK_HEIGHT / 2 + Math.sin(this.angle) * 31;
         
         if (this.weapon === 0) {
             // Standard shell
             projectiles.push(new Projectile(
-                this.x + TANK_WIDTH/2,
-                this.y - TANK_HEIGHT,
+                barrelTipX,
+                barrelTipY,
                 velocity.x,
                 velocity.y,
                 15,
@@ -237,8 +240,8 @@ class Tank {
                     y: Math.sin(spreadAngle) * this.power
                 };
                 projectiles.push(new Projectile(
-                    this.x + TANK_WIDTH/2,
-                    this.y - TANK_HEIGHT,
+                    barrelTipX,
+                    barrelTipY,
                     spreadVelocity.x,
                     spreadVelocity.y,
                     5,
