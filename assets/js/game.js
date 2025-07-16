@@ -71,11 +71,20 @@ function generateTerrain() {
     terrain = [];
     terrainFreq = 0.015 + Math.random() * 0.02;
     terrainAmp = 80 + Math.random() * 120;
-    
+
     for (let i = 0; i <= TERRAIN_POINTS; i++) {
         const x = (i / TERRAIN_POINTS) * canvas.width;
         const y = canvas.height - 50 - Math.sin(x * terrainFreq) * terrainAmp;
         terrain.push({x, y});
+    }
+
+    // Raise terrain if any points fall below the bottom of the canvas
+    const maxY = Math.max(...terrain.map(p => p.y));
+    if (maxY > canvas.height) {
+        const shift = maxY - canvas.height;
+        for (const point of terrain) {
+            point.y -= shift;
+        }
     }
 }
 
