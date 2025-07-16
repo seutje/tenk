@@ -5,7 +5,8 @@ const DEMO_TURN_TIME = 1;
 const GROUND_HEIGHT = 100;
 const TANK_WIDTH = 40;
 const TANK_HEIGHT = 20;
-const HIDDEN_WEIGHTS = 11;
+const HIDDEN_WEIGHTS = 13;
+const INPUT_SIZE = 8;
 
 const WEAPONS = {
     standard: {
@@ -51,7 +52,7 @@ const WEAPONS = {
 
 class NeuralNetwork {
     constructor({ hiddenWeights, hiddenBias, outputWeights, outputBias } = {}) {
-        this.hiddenWeights = hiddenWeights || Array.from({ length: HIDDEN_WEIGHTS }, () => Array(5).fill(0));
+        this.hiddenWeights = hiddenWeights || Array.from({ length: HIDDEN_WEIGHTS }, () => Array(INPUT_SIZE).fill(0));
         this.hiddenBias = hiddenBias || Array(HIDDEN_WEIGHTS).fill(0);
         this.outputWeights = outputWeights || Array.from({ length: 7 }, () => Array(HIDDEN_WEIGHTS).fill(0));
         this.outputBias = outputBias || Array(7).fill(0);
@@ -60,7 +61,7 @@ class NeuralNetwork {
     static random() {
         const rand = () => Math.random() * 2 - 1;
         return new NeuralNetwork({
-            hiddenWeights: Array.from({ length: HIDDEN_WEIGHTS }, () => Array.from({ length: 5 }, rand)),
+            hiddenWeights: Array.from({ length: HIDDEN_WEIGHTS }, () => Array.from({ length: INPUT_SIZE }, rand)),
             hiddenBias: Array.from({ length: HIDDEN_WEIGHTS }, () => rand() / 2),
             outputWeights: Array.from({ length: 7 }, () => Array.from({ length: HIDDEN_WEIGHTS }, rand)),
             outputBias: Array.from({ length: 7 }, () => rand() / 2),
@@ -165,7 +166,7 @@ function mutate(net) {
 
 function simulateShot(net, enemyX) {
     const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
-    const inputs = [enemyX / 800, 0, 0, 0, Math.abs(enemyX) / 800];
+    const inputs = [enemyX / 800, 0, 0, 0, 0, 0, enemyX / 800, 0];
     const { angle, power, weapon } = nn.decide(inputs);
     const rad = (angle * Math.PI) / 180;
     const w = WEAPONS[weapon];
@@ -356,7 +357,7 @@ function createTanks(player = true) {
             alive: true,
             color: colors[i],
             ai: !isPlayer,
-            sensors: { front: 0, back: 0, enemy: 0 },
+            sensors: { front: 0, back: 0, selfX: 0, selfY: 0, enemyX: 0, enemyY: 0 },
             aiNet: !isPlayer
                 ? trainedNet
                     ? trainedNet.clone()
@@ -448,7 +449,10 @@ function makeAIDecision(id) {
         dy / canvas.height,
         tank.sensors.front,
         tank.sensors.back,
-        tank.sensors.enemy,
+        tank.sensors.selfX,
+        tank.sensors.selfY,
+        tank.sensors.enemyX,
+        tank.sensors.enemyY,
     ];
     const { angle, power, weapon } = neuralDecision(tank.aiNet, inputs);
     aiDecisions.push({ tank, weapon, angle, power });
@@ -524,14 +528,18 @@ function updateSensors(tank) {
     const back = getTerrainHeight(tank.x - 20);
     tank.sensors.front = (front - base) / 50;
     tank.sensors.back = (back - base) / 50;
+    tank.sensors.selfX = tank.x / canvas.width;
+    tank.sensors.selfY = tank.y / canvas.height;
     const others = tanks.filter((t) => t.id !== tank.id && t.alive);
     if (others.length) {
-        const dist = Math.min(
-            ...others.map((o) => Math.hypot(o.x - tank.x, o.y - tank.y)),
+        const enemy = others.reduce((a, b) =>
+            Math.hypot(a.x - tank.x, a.y - tank.y) < Math.hypot(b.x - tank.x, b.y - tank.y) ? a : b,
         );
-        tank.sensors.enemy = dist / canvas.width;
+        tank.sensors.enemyX = enemy.x / canvas.width;
+        tank.sensors.enemyY = enemy.y / canvas.height;
     } else {
-        tank.sensors.enemy = 1;
+        tank.sensors.enemyX = 0;
+        tank.sensors.enemyY = 0;
     }
 }
 
@@ -688,6 +696,7 @@ if (typeof module !== 'undefined') {
         neuralDecision,
         GRAVITY,
         HIDDEN_WEIGHTS,
+        INPUT_SIZE,
         loadTrainedNet,
         evolve,
         startBackgroundTraining,

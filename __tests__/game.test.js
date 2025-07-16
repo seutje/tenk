@@ -1,4 +1,4 @@
-const { WEAPONS, simulateShot, HIDDEN_WEIGHTS } = require('../assets/js/game');
+const { WEAPONS, simulateShot, HIDDEN_WEIGHTS, INPUT_SIZE } = require('../assets/js/game');
 
 test('weapon configuration includes mega blast damage', () => {
   expect(WEAPONS.mega.damage).toBe(50);
@@ -16,7 +16,7 @@ test('weapon keys', () => {
 
 test('simulateShot penalizes self hits', () => {
   const net = {
-    hiddenWeights: Array.from({ length: HIDDEN_WEIGHTS }, () => Array(5).fill(0)),
+    hiddenWeights: Array.from({ length: HIDDEN_WEIGHTS }, () => Array(INPUT_SIZE).fill(0)),
     hiddenBias: Array(HIDDEN_WEIGHTS).fill(0),
     outputWeights: Array.from({ length: 7 }, () => Array(HIDDEN_WEIGHTS).fill(0)),
     outputBias: [1, -1, 0, 0, 0, 0, 0],
