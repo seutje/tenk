@@ -47,6 +47,41 @@ const WEAPONS = {
     },
 };
 
+// Simple neural network weights for AI decision making
+const AI_NET = {
+    hiddenWeights: [
+        [0.4, -0.3],
+        [-0.2, 0.6],
+        [0.1, 0.2],
+    ],
+    hiddenBias: [0.1, -0.1, 0.05],
+    outputWeights: [
+        [0.5, -0.3, 0.2], // angle
+        [0.3, 0.4, -0.2], // power
+        [0.1, 0.2, -0.3], // standard
+        [-0.1, 0.3, 0.4], // rapid
+        [0.2, -0.5, 0.3], // triple
+        [-0.3, 0.1, 0.2], // bouncy
+        [0.4, 0.2, -0.2], // mega
+    ],
+    outputBias: [0, 0, 0, 0, 0, 0, 0],
+};
+
+function neuralDecision(dx, dy) {
+    const inputs = [dx / canvas.width, dy / canvas.height];
+    const hidden = AI_NET.hiddenWeights.map((w, i) =>
+        Math.tanh(w[0] * inputs[0] + w[1] * inputs[1] + AI_NET.hiddenBias[i]),
+    );
+    const out = AI_NET.outputWeights.map((w, i) =>
+        w.reduce((s, wt, j) => s + wt * hidden[j], AI_NET.outputBias[i]),
+    );
+    const angle = Math.max(0, Math.min(180, (out[0] + 1) * 90));
+    const power = Math.max(0.3, Math.min(1, (out[1] + 1) / 2));
+    const weaponIndex = out.slice(2).indexOf(Math.max(...out.slice(2)));
+    const weapon = Object.keys(WEAPONS)[weaponIndex];
+    return { angle, power, weapon };
+}
+
 let canvas,
     ctx,
     terrain,
@@ -184,17 +219,7 @@ function makeAIDecision(id) {
     );
     const dx = target.x - tank.x;
     const dy = target.y - tank.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    let angle = (Math.atan2(-dy, dx) * 180) / Math.PI;
-    angle = Math.max(0, Math.min(180, angle));
-    const power = Math.min(
-        1,
-        Math.max(0.3, dist / 500 + (Math.random() - 0.5) * 0.2),
-    );
-    const weapon =
-        Object.keys(WEAPONS)[
-            Math.floor(Math.random() * Object.keys(WEAPONS).length)
-        ];
+    const { angle, power, weapon } = neuralDecision(dx, dy);
     aiDecisions.push({ tank, weapon, angle, power });
 }
 
