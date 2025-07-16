@@ -196,7 +196,7 @@ function simulateShot(net, enemyX, terrain = generateTrainingTerrain()) {
     const w = WEAPONS[weapon];
     const speed = w.speed * power;
     let vx = Math.cos(rad) * speed;
-    let vy = Math.sin(rad) * speed;
+    let vy = -Math.sin(rad) * speed;
 
     const width = 800;
     const height = 600;
