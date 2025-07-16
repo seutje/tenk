@@ -290,7 +290,7 @@ function resize() {
 function generateTerrain() {
     terrain = [];
     const segments = Math.floor(canvas.width / 10);
-    const base = canvas.height - GROUND_HEIGHT;
+    const base = canvas.height - GROUND_HEIGHT - 50; // raise terrain by 50px
     const amplitude = 50 + Math.random() * 50; // vary hill height
     const frequency = 0.3 + Math.random() * 0.4; // vary hill width
     for (let i = 0; i <= segments; i++) {
@@ -478,7 +478,7 @@ function getTerrainHeight(x) {
             return terrain[i].y + r * (terrain[i + 1].y - terrain[i].y);
         }
     }
-    return canvas.height - GROUND_HEIGHT;
+    return canvas.height - GROUND_HEIGHT - 50; // match raised terrain level
 }
 
 function updateSensors(tank) {
