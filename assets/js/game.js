@@ -591,6 +591,8 @@ function updateUI() {
         const stat = document.getElementById(`${prefix}-stat`);
         const healthSpan = document.getElementById(`${prefix}-health`);
         if (!stat || !healthSpan) return;
+        const nameEl = stat.querySelector(".tank-name");
+        if (nameEl) nameEl.textContent = t.name;
         healthSpan.textContent = t.health;
         const fill = stat.querySelector(".health-fill");
         if (fill) fill.style.width = `${(t.health / t.maxHealth) * 100}%`;
