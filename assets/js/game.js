@@ -283,7 +283,8 @@ function generateTerrain() {
 
 function createTanks() {
     tanks = [];
-    const positions = [0.15, 0.35, 0.65, 0.85];
+    // Spawn tanks at random horizontal positions across the battlefield
+    const positions = Array.from({ length: 4 }, () => Math.random() * 0.8 + 0.1).sort();
     const colors = ["#00ff00", "#00aa00", "#008800", "#006600"];
     for (let i = 0; i < 4; i++) {
         tanks.push({
