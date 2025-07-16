@@ -445,8 +445,13 @@ function gameLoop() {
 }
 
 if (typeof module !== 'undefined') {
-    // Export for testing in Node environment
-    module.exports = { WEAPONS };
+    // Export parts of the game logic for Node usage
+    module.exports = {
+        WEAPONS,
+        createRandomNet,
+        neuralDecision,
+        GRAVITY,
+    };
 } else {
     window.onload = init;
 }
