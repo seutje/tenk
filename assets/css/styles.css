@@ -79,6 +79,7 @@ input {
 }
 .tank-name {
     font-weight: bold;
+    color: #000;
     margin-bottom: 5px;
 }
 .health-bar {
