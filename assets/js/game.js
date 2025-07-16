@@ -34,6 +34,7 @@ let particles = [];
 // Neural network storage
 let globalBestModel = null;
 let trainingPool = [];
+const TRAINING_ITERATIONS = 500; // increased from 10 for faster background training
 
 // Initialize terrain
 function generateTerrain() {
@@ -444,7 +445,7 @@ function simulateTraining() {
     }
     
     // Run simulation battles for training
-    for (let sim = 0; sim < 10; sim++) {
+    for (let sim = 0; sim < TRAINING_ITERATIONS; sim++) {
         let simTanks = [
             new Tank(100, 300, '#ff4444', 1),
             new Tank(300, 300, '#44ff44', 2),
