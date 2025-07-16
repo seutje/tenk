@@ -1,0 +1,16 @@
+{
+  "name": "tenk",
+  "version": "1.0.0",
+  "description": "This project contains a small web game. It now includes a Node.js setup with Jest for running tests.",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "jest": "^29.0.0"
+  }
+}
