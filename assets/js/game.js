@@ -47,34 +47,26 @@ const WEAPONS = {
     },
 };
 
-// Simple neural network weights for AI decision making
-const AI_NET = {
-    hiddenWeights: [
-        [0.4, -0.3, 0.1, -0.1, 0],
-        [-0.2, 0.6, 0.05, 0.05, 0],
-        [0.1, 0.2, -0.1, 0.1, 0],
-    ],
-    hiddenBias: [0.1, -0.1, 0.05],
-    outputWeights: [
-        [0.5, -0.3, 0.2], // angle
-        [0.3, 0.4, -0.2], // power
-        [0.1, 0.2, -0.3], // standard
-        [-0.1, 0.3, 0.4], // rapid
-        [0.2, -0.5, 0.3], // triple
-        [-0.3, 0.1, 0.2], // bouncy
-        [0.4, 0.2, -0.2], // mega
-    ],
-    outputBias: [0, 0, 0, 0, 0, 0, 0],
-};
-
-function neuralDecision(inputs) {
-    const hidden = AI_NET.hiddenWeights.map((w, i) =>
-        Math.tanh(
-            w.reduce((s, wt, j) => s + wt * inputs[j], AI_NET.hiddenBias[i]),
-        ),
+// Generate a random neural network for an AI tank
+function createRandomNet() {
+    const rand = () => Math.random() * 2 - 1; // range [-1, 1]
+    const hiddenWeights = Array.from({ length: 3 }, () =>
+        Array.from({ length: 5 }, rand),
     );
-    const out = AI_NET.outputWeights.map((w, i) =>
-        w.reduce((s, wt, j) => s + wt * hidden[j], AI_NET.outputBias[i]),
+    const hiddenBias = Array.from({ length: 3 }, () => rand() / 2);
+    const outputWeights = Array.from({ length: 7 }, () =>
+        Array.from({ length: 3 }, rand),
+    );
+    const outputBias = Array.from({ length: 7 }, () => rand() / 2);
+    return { hiddenWeights, hiddenBias, outputWeights, outputBias };
+}
+
+function neuralDecision(net, inputs) {
+    const hidden = net.hiddenWeights.map((w, i) =>
+        Math.tanh(w.reduce((s, wt, j) => s + wt * inputs[j], net.hiddenBias[i])),
+    );
+    const out = net.outputWeights.map((w, i) =>
+        w.reduce((s, wt, j) => s + wt * hidden[j], net.outputBias[i]),
     );
     const angle = Math.max(0, Math.min(180, (out[0] + 1) * 90));
     const power = Math.max(0.3, Math.min(1, (out[1] + 1) / 2));
@@ -143,6 +135,7 @@ function createTanks() {
             color: colors[i],
             ai: !!i,
             sensors: { front: 0, back: 0, enemy: 0 },
+            aiNet: i ? createRandomNet() : null,
         });
     }
     placeTanks();
@@ -229,7 +222,7 @@ function makeAIDecision(id) {
         tank.sensors.back,
         tank.sensors.enemy,
     ];
-    const { angle, power, weapon } = neuralDecision(inputs);
+    const { angle, power, weapon } = neuralDecision(tank.aiNet, inputs);
     aiDecisions.push({ tank, weapon, angle, power });
 }
 
