@@ -1,6 +1,7 @@
 // Game constants
 const GRAVITY = 0.2;
 const TURN_TIME = 30;
+const DEMO_TURN_TIME = 1;
 const GROUND_HEIGHT = 50;
 const TANK_WIDTH = 40;
 const TANK_HEIGHT = 20;
@@ -248,20 +249,36 @@ let canvas,
     timer,
     turnInProgress,
     gameOver,
-    aiDecisions;
+    aiDecisions,
+    hasPlayer = true,
+    loopStarted = false,
+    eventsBound = false;
 
-function init() {
+function init(player = true) {
     canvas = document.getElementById("gameCanvas");
     ctx = canvas.getContext("2d");
+    hasPlayer = player;
     projectiles = [];
     explosions = [];
     gameOver = false;
     resize();
     generateTerrain();
-    createTanks();
+    createTanks(player);
     updateUI();
-    bindUI();
-    gameLoop();
+    if (!eventsBound) {
+        bindUI();
+        eventsBound = true;
+    }
+    document.getElementById("controls").style.display = hasPlayer
+        ? "block"
+        : "none";
+    document.getElementById("timerBar").style.display = hasPlayer
+        ? "block"
+        : "none";
+    if (!loopStarted) {
+        gameLoop();
+        loopStarted = true;
+    }
     startTurn();
 }
 
@@ -281,15 +298,16 @@ function generateTerrain() {
     }
 }
 
-function createTanks() {
+function createTanks(player = true) {
     tanks = [];
     // Spawn tanks at random horizontal positions across the battlefield
     const positions = Array.from({ length: 4 }, () => Math.random() * 0.8 + 0.1).sort();
     const colors = ["#00ff00", "#00aa00", "#008800", "#006600"];
     for (let i = 0; i < 4; i++) {
+        const isPlayer = player && i === 0;
         tanks.push({
             id: i,
-            name: i ? `AI-${i}` : "Player",
+            name: isPlayer ? "Player" : `AI-${player ? i : i + 1}`,
             x: canvas.width * positions[i],
             y: 0,
             width: TANK_WIDTH,
@@ -298,9 +316,9 @@ function createTanks() {
             maxHealth: 100,
             alive: true,
             color: colors[i],
-            ai: !!i,
+            ai: !isPlayer,
             sensors: { front: 0, back: 0, enemy: 0 },
-            aiNet: i
+            aiNet: !isPlayer
                 ? trainedNet
                     ? JSON.parse(JSON.stringify(trainedNet))
                     : createRandomNet()
@@ -349,23 +367,25 @@ function bindUI() {
 
 function startTurn() {
     if (gameOver) return;
-    timer = TURN_TIME;
+    const turnTime = hasPlayer ? TURN_TIME : DEMO_TURN_TIME;
+    timer = turnTime;
     turnInProgress = false;
     aiDecisions = [];
     const interval = setInterval(() => {
         timer -= 0.1;
         document.getElementById("timerFill").style.width =
-            (timer / TURN_TIME) * 100 + "%";
+            (timer / turnTime) * 100 + "%";
         if (timer <= 0) {
             clearInterval(interval);
-            tanks[0].alive ? playerFire() : processAITurn();
+            hasPlayer && tanks[0].alive ? playerFire() : processAITurn();
         }
     }, 100);
-    tanks.slice(1).forEach((t, i) => t.alive && makeAIDecision(i + 1));
+    const startIdx = hasPlayer ? 1 : 0;
+    tanks.slice(startIdx).forEach((t, i) => t.alive && makeAIDecision(startIdx + i));
 }
 
 function playerFire() {
-    if (turnInProgress || !tanks[0].alive) return;
+    if (!hasPlayer || turnInProgress || !tanks[0].alive) return;
     const w = document.getElementById("weaponSelect").value;
     const a = +document.getElementById("angleSlider").value;
     const p = +document.getElementById("powerSlider").value / 100;
@@ -559,6 +579,12 @@ function showMessage(msg) {
     setTimeout(() => (box.style.display = "none"), 3000);
 }
 
+function startGame() {
+    const screen = document.getElementById("startScreen");
+    if (screen) screen.style.display = "none";
+    init(true);
+}
+
 function updateUI() {
     tanks.forEach((t) => {
         const prefix = t.id === 0 ? "player" : `ai${t.id}`;
@@ -630,8 +656,10 @@ if (typeof module !== 'undefined') {
 } else {
     window.onload = () => {
         loadTrainedNet().then(() => {
-            init();
+            init(false);
             startBackgroundTraining();
+            const btn = document.getElementById("startButton");
+            if (btn) btn.addEventListener("click", startGame);
         });
     };
 }
