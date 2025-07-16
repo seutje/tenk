@@ -100,22 +100,24 @@ class NeuralNetwork {
     
     forward(inputs) {
         // Normalize inputs
-        inputs = inputs.map((val, idx) => {
+        const normalizedInputs = inputs.map((val, idx) => {
             if (idx < 12) return val / canvas.width; // Positions
-            if (idx === 12) return val / 0.03; // Frequency
+            if (idx === 12) return val / 0.035; // Frequency, corrected max
             return val / 200; // Amplitude
         });
-        
+
         // Hidden layer
-        let hidden = inputs.map((_, i) => 
-            this.weights1[i].reduce((sum, w, j) => sum + w * inputs[j], 0) + this.bias1[0][i]
-        ).map(this.sigmoid);
-        
+        const hidden = new Array(HIDDEN_SIZE).fill(0).map((_, i) => {
+            const sum = normalizedInputs.reduce((acc, input, j) => acc + input * this.weights1[j][i], 0);
+            return this.sigmoid(sum + this.bias1[0][i]);
+        });
+
         // Output layer
-        let outputs = this.weights2[0].map((_, j) =>
-            hidden.reduce((sum, h, i) => sum + h * this.weights2[i][j], 0) + this.bias2[0][j]
-        ).map(this.sigmoid);
-        
+        const outputs = new Array(OUTPUT_SIZE).fill(0).map((_, i) => {
+            const sum = hidden.reduce((acc, h, j) => acc + h * this.weights2[j][i], 0);
+            return this.sigmoid(sum + this.bias2[0][i]);
+        });
+
         return outputs;
     }
     
@@ -491,70 +493,69 @@ function simulateTraining() {
         globalBestModel = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
     }
 
-    let generationBest = -Infinity;
+    let generationBestFitness = -Infinity;
     let generationBestBrain = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
 
-    // Run simulation battles for training
-    for (let sim = 0; sim < TRAINING_ITERATIONS; sim++) {
-        let simTanks = [
-            new Tank(100, 300, '#ff4444', 1),
-            new Tank(300, 300, '#44ff44', 2),
-            new Tank(500, 300, '#4444ff', 3),
-            new Tank(700, 300, '#ffff44', 4)
-        ];
-        
-        simTanks.forEach((tank, i) => {
-            tank.brain.copyFrom(trainingPool[Math.floor(Math.random() * trainingPool.length)]);
-        });
-        
-        // Run quick simulation
-        for (let round = 0; round < 5; round++) {
-            simTanks.forEach(tank => {
-                if (tank.alive) {
-                    const inputs = [
-                        tank.x,
-                        tank.y,
-                        ...simTanks.filter(t => t.id !== tank.id).flatMap(t => [t.x, t.y, t.alive ? 1 : 0]),
-                        terrainFreq,
-                        terrainAmp
-                    ];
-                    
-                    const outputs = tank.brain.forward(inputs);
-                    tank.angle = (outputs[0] - 0.5) * Math.PI;
-                    tank.power = outputs[1] * MAX_POWER;
-                    
-                    // Simulate shot
-                    const target = simTanks.find(t => t.id !== tank.id && t.alive);
-                    if (target) {
-                        const distance = Math.sqrt(
-                            Math.pow(target.x - tank.x, 2) + 
-                            Math.pow(target.y - tank.y, 2)
-                        );
-                        tank.fitness += Math.max(0, 100 - distance);
-                    }
-                }
-            });
-        }
-        
-        // Update training pool with best performers
-        simTanks.sort((a, b) => b.fitness - a.fitness);
-        trainingPool[Math.floor(Math.random() * trainingPool.length)].copyFrom(simTanks[0].brain);
-        if (simTanks[0].fitness > generationBest) {
-            generationBest = simTanks[0].fitness;
-            generationBestBrain.copyFrom(simTanks[0].brain);
-        }
-    }
+    const fitnessScores = trainingPool.map(brain => {
+        let totalFitness = 0;
+        for (let i = 0; i < 5; i++) { // 5 evaluation rounds
+            const simTanks = [
+                new Tank(100, 300, '#ff4444', 1),
+                new Tank(300, 300, '#44ff44', 2),
+                new Tank(500, 300, '#4444ff', 3),
+                new Tank(700, 300, '#ffff44', 4)
+            ];
 
-    // Update global best model
-    if (generationBest > globalBestFitness) {
-        globalBestFitness = generationBest;
+            const mainTank = simTanks[0];
+            mainTank.brain.copyFrom(brain);
+            mainTank.fitness = 0; // Reset fitness for each evaluation
+
+            simTanks.slice(1).forEach(otherTank => {
+                otherTank.brain.copyFrom(trainingPool[Math.floor(Math.random() * trainingPool.length)]);
+            });
+
+            for (let round = 0; round < 5; round++) {
+                simTanks.forEach(tank => {
+                    if (tank.alive) {
+                        const inputs = [
+                            tank.x, tank.y,
+                            ...simTanks.filter(t => t.id !== tank.id).flatMap(t => [t.x, t.y, t.alive ? 1 : 0]),
+                            terrainFreq, terrainAmp
+                        ];
+                        const outputs = tank.brain.forward(inputs);
+                        tank.angle = (outputs[0] - 0.5) * Math.PI;
+                        tank.power = outputs[1] * MAX_POWER;
+
+                        const target = simTanks.find(t => t.id !== tank.id && t.alive);
+                        if (target) {
+                            const distance = Math.sqrt(Math.pow(target.x - tank.x, 2) + Math.pow(target.y - tank.y, 2));
+                            const angleToTarget = Math.atan2(target.y - tank.y, target.x - tank.x);
+                            const angleDiff = Math.abs(angleToTarget - tank.angle);
+                            let fitness = Math.max(0, (canvas.width - distance) - (angleDiff * 100));
+                            tank.fitness += fitness;
+                        }
+                    }
+                });
+            }
+            totalFitness += mainTank.fitness;
+        }
+        return { fitness: totalFitness / 5, brain };
+    });
+
+    fitnessScores.sort((a, b) => b.fitness - a.fitness);
+
+    generationBestFitness = fitnessScores[0].fitness;
+    generationBestBrain.copyFrom(fitnessScores[0].brain);
+
+    if (generationBestFitness > globalBestFitness) {
+        globalBestFitness = generationBestFitness;
         globalBestModel.copyFrom(generationBestBrain);
     }
-
-    return generationBest;
+    
+    return { bestFitness: generationBestFitness, bestBrain: generationBestBrain };
 }
 
-function trainCLI(generations = 500) {
+function trainCLI(generations = 10) {
     if (!globalBestModel) {
         globalBestModel = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
     }
@@ -564,11 +565,30 @@ function trainCLI(generations = 500) {
     }
 
     for (let g = 0; g < generations; g++) {
-        const genBest = simulateTraining();
-        trainingPool.forEach(net => net.mutate());
-        if (genBest > globalBestFitness) globalBestFitness = genBest;
+        const { bestFitness, bestBrain } = simulateTraining();
+
+        if (bestFitness > globalBestFitness) {
+            globalBestFitness = bestFitness;
+            globalBestModel.copyFrom(bestBrain);
+        }
+
+        const newPool = [];
+        // Elitism: Keep the best model from the last generation.
+        const eliteBrain = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+        eliteBrain.copyFrom(globalBestModel);
+        newPool.push(eliteBrain);
+
+        // Create the rest of the new generation by mutating the best model.
+        while (newPool.length < trainingPool.length) {
+            const newNet = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+            newNet.copyFrom(globalBestModel);
+            newNet.mutate(MUTATION_RATE);
+            newPool.push(newNet);
+        }
+        trainingPool = newPool;
+
         console.log(
-            `Generation ${g + 1}/${generations} - best: ${genBest.toFixed(2)} global best: ${globalBestFitness.toFixed(2)}`
+            `Generation ${g + 1}/${generations} - Best Fitness: ${bestFitness.toFixed(2)}, Global Best: ${globalBestFitness.toFixed(2)}`
         );
     }
 
