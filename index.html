@@ -1,92 +1,25 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>TeNk!</title>
-        <link rel="stylesheet" href="assets/css/styles.css" />
-    </head>
-    <body>
-        <div id="startScreen">
-            <h1>TeNk!</h1>
-            <button id="startButton">StArT gAmE</button>
-        </div>
-        <div id="gameContainer">
-            <canvas id="gameCanvas"></canvas>
-            <div id="ui">
-                <div id="timerBar"><div id="timerFill"></div></div>
-                <div id="controls">
-                    <div>
-                        <label for="weaponSelect">Weapon:</label>
-                        <select id="weaponSelect">
-                            <option value="standard">Standard Shell</option>
-                            <option value="rapid">Rapid Fire</option>
-                            <option value="triple">Triple Shot</option>
-                            <option value="bouncy">Bouncy Shell</option>
-                            <option value="mega">Mega Blast</option>
-                        </select>
-                        <div id="weaponInfo">Standard explosive shell</div>
-                    </div>
-                    <div>
-                        <label for="angleSlider"
-                            >Angle: <span id="angleValue">45</span>°</label
-                        >
-                        <input
-                            type="range"
-                            id="angleSlider"
-                            min="0"
-                            max="180"
-                            value="45"
-                        />
-                    </div>
-                    <div>
-                        <label for="powerSlider"
-                            >Power: <span id="powerValue">50</span>%</label
-                        >
-                        <input
-                            type="range"
-                            id="powerSlider"
-                            min="10"
-                            max="100"
-                            value="50"
-                        />
-                    </div>
-                    <button id="fireButton">FIRE!</button>
-                </div>
-                <div id="stats">
-                    <div class="tank-stat" id="player-stat">
-                        <div class="tank-name">AI-1</div>
-                        <div>Health: <span id="player-health">100</span></div>
-                        <div class="health-bar">
-                            <div class="health-fill" style="width: 100%"></div>
-                        </div>
-                    </div>
-                    <div class="tank-stat" id="ai1-stat">
-                        <div class="tank-name">AI-2</div>
-                        <div>Health: <span id="ai1-health">100</span></div>
-                        <div class="health-bar">
-                            <div class="health-fill" style="width: 100%"></div>
-                        </div>
-                    </div>
-                    <div class="tank-stat" id="ai2-stat">
-                        <div class="tank-name">AI-3</div>
-                        <div>Health: <span id="ai2-health">100</span></div>
-                        <div class="health-bar">
-                            <div class="health-fill" style="width: 100%"></div>
-                        </div>
-                    </div>
-                    <div class="tank-stat" id="ai3-stat">
-                        <div class="tank-name">AI-4</div>
-                        <div>Health: <span id="ai3-health">100</span></div>
-                        <div class="health-bar">
-                            <div class="health-fill" style="width: 100%"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div id="messageBox"></div>
-        </div>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeNk!</title>
+    <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+    <h1 style="text-align: center;">Neural Tank Battle Arena</h1>
+    <div id="controls">
+        <button onclick="togglePause()">Pause/Resume</button>
+        <button onclick="resetGame()">Reset Game</button>
+        <button onclick="toggleSpeed()">Speed: <span id="speedDisplay">1x</span></button>
+    </div>
+    <canvas id="gameCanvas" width="1000" height="600"></canvas>
+    <div id="stats"></div>
+    <div id="info">
+        <p>Neural Network Input: [myX, myY, enemy1X, enemy1Y, enemy1Alive, enemy2X, enemy2Y, enemy2Alive, enemy3X, enemy3Y, enemy3Alive, terrainFreq, terrainAmp]</p>
+        <p>Output: [angle, power, weaponType (0=shell, 1=shotgun)]</p>
+    </div>
 
-        <script src="assets/js/game.js"></script>
-    </body>
+    <script src="assets/js/game.js"></script>
+</body>
 </html>

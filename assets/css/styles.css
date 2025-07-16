@@ -1,145 +1,49 @@
 body {
     margin: 0;
-    padding: 0;
-    overflow: hidden;
-    background-color: #000;
-    font-family: "Courier New", monospace;
-    color: #00ff00;
+    padding: 20px;
+    font-family: Arial, sans-serif;
+    background: #1a1a1a;
+    color: white;
+    overflow-x: hidden;
 }
-#gameContainer {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
-}
-#gameCanvas {
-    border: 2px solid #00ff00;
-    box-shadow: 0 0 10px #00ff00;
-}
-#ui {
-    position: absolute;
-    bottom: 10px;
-    left: 10px;
-    background-color: rgba(0, 0, 0, 0.7);
-    border: 1px solid #00ff00;
-    padding: 10px;
-    border-radius: 5px;
-    width: calc(100% - 40px);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-#timerBar {
-    width: 100%;
-    height: 10px;
-    background-color: #111;
-    border: 1px solid #00ff00;
-}
-#timerFill {
-    height: 100%;
-    background-color: #00ff00;
-    width: 100%;
-    transition: width 0.1s linear;
+canvas {
+    border: 2px solid #444;
+    background: linear-gradient(to bottom, #87CEEB 0%, #98FB98 100%);
+    display: block;
+    margin: 0 auto;
 }
 #controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    text-align: center;
+    margin: 10px 0;
 }
 button {
-    background-color: #000;
-    color: #00ff00;
-    border: 1px solid #00ff00;
-    padding: 5px 10px;
+    padding: 10px 20px;
+    margin: 0 5px;
+    background: #444;
+    color: white;
+    border: none;
     cursor: pointer;
-    font-family: "Courier New", monospace;
-    transition: all 0.2s;
+    border-radius: 5px;
 }
 button:hover {
-    background-color: #00ff00;
-    color: #000;
-}
-select,
-input {
-    background-color: #000;
-    color: #00ff00;
-    border: 1px solid #00ff00;
-    padding: 5px;
-    font-family: "Courier New", monospace;
+    background: #666;
 }
 #stats {
     display: flex;
     justify-content: space-around;
-    margin-top: 10px;
+    margin: 10px 0;
+    flex-wrap: wrap;
 }
-.tank-stat {
-    text-align: center;
-    padding: 5px;
-    border: 1px solid #00ff00;
-    width: 23%;
-}
-.tank-name {
-    font-weight: bold;
-    margin-bottom: 5px;
-}
-.health-bar {
-    width: 100%;
-    height: 5px;
-    background-color: #111;
-    margin-top: 2px;
-}
-.health-fill {
-    height: 100%;
-    background-color: #00ff00;
-    transition: width 0.3s;
-}
-.dead {
-    color: #990000;
-    border-color: #990000;
-}
-.dead .health-fill {
-    background-color: #990000;
-}
-#messageBox {
-    position: absolute;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: rgba(0, 0, 0, 0.7);
-    border: 1px solid #00ff00;
+.tank-stats {
+    background: #333;
     padding: 10px;
     border-radius: 5px;
+    margin: 5px;
+    min-width: 150px;
+}
+#info {
     text-align: center;
-    max-width: 80%;
-    display: none;
-}
-.explosion {
-    position: absolute;
-    border-radius: 50%;
-    background: radial-gradient(circle, #ffff00, #ff7700, #ff0000);
-    transform: translate(-50%, -50%);
-    z-index: 10;
-    box-shadow: 0 0 20px #ff7700;
-}
-#weaponInfo {
-    font-size: 12px;
-    margin-top: 5px;
-    color: #00ff00;
-}
-
-#startScreen {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
-
-#startScreen h1 {
-    margin-bottom: 20px;
+    margin: 10px 0;
+    font-size: 14px;
+    color: #aaa;
 }

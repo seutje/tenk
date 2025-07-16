@@ -1,829 +1,604 @@
-// Game constants
-const GRAVITY = 0.2;
-const TURN_TIME = 30;
-const DEMO_TURN_TIME = 1;
-const GROUND_HEIGHT = 100;
-const TANK_WIDTH = 40;
-const TANK_HEIGHT = 20;
-const ENEMY_COUNT = 3;
-const INPUT_SIZE = 2 + 5 + ENEMY_COUNT * 3; // additional wind sensor
-const HIDDEN_WEIGHTS = INPUT_SIZE + 5;
-const DEFAULT_TERRAIN_AMPLITUDE = 70;
-const DEFAULT_TERRAIN_FREQUENCY = 0.5;
-let currentAmplitude = DEFAULT_TERRAIN_AMPLITUDE;
-let currentFrequency = DEFAULT_TERRAIN_FREQUENCY;
-const WIND_MAX = 0.05;
-let currentWind = 0;
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-const WEAPONS = {
-    standard: {
-        name: "Standard Shell",
-        damage: 25,
-        radius: 30,
-        speed: 12,
-        description: "Standard explosive shell",
-    },
-    rapid: {
-        name: "Rapid Fire",
-        damage: 15,
-        radius: 20,
-        speed: 18,
-        shots: 3,
-        description: "Three small shells fired in succession",
-    },
-    triple: {
-        name: "Triple Shot",
-        damage: 20,
-        radius: 25,
-        speed: 15,
-        spread: 0.3,
-        shots: 3,
-        description: "Three shells at different angles",
-    },
-    bouncy: {
-        name: "Bouncy Shell",
-        damage: 20,
-        radius: 25,
-        speed: 13.5,
-        bounces: 3,
-        description: "Bounces off terrain before exploding",
-    },
-    mega: {
-        name: "Mega Blast",
-        damage: 50,
-        radius: 60,
-        speed: 10.5,
-        description: "Devastating wide-radius explosion",
-    },
-};
+// Game state
+let gameSpeed = 1;
+let isPaused = false;
+let generation = 1;
+let frameCount = 0;
 
-class NeuralNetwork {
-    constructor({ hiddenWeights, hiddenBias, outputWeights, outputBias } = {}) {
-        this.hiddenWeights = hiddenWeights || Array.from({ length: HIDDEN_WEIGHTS }, () => Array(INPUT_SIZE).fill(0));
-        this.hiddenBias = hiddenBias || Array(HIDDEN_WEIGHTS).fill(0);
-        this.outputWeights = outputWeights || Array.from({ length: 7 }, () => Array(HIDDEN_WEIGHTS).fill(0));
-        this.outputBias = outputBias || Array(7).fill(0);
-    }
-
-    static random() {
-        const rand = () => Math.random() * 2 - 1;
-        return new NeuralNetwork({
-            hiddenWeights: Array.from({ length: HIDDEN_WEIGHTS }, () => Array.from({ length: INPUT_SIZE }, rand)),
-            hiddenBias: Array.from({ length: HIDDEN_WEIGHTS }, () => rand() / 2),
-            outputWeights: Array.from({ length: 7 }, () => Array.from({ length: HIDDEN_WEIGHTS }, rand)),
-            outputBias: Array.from({ length: 7 }, () => rand() / 2),
-        });
-    }
-
-    static from(obj) {
-        return new NeuralNetwork(obj);
-    }
-
-    clone() {
-        return NeuralNetwork.from(JSON.parse(JSON.stringify(this)));
-    }
-
-    mutate(rate = MUTATION_RATE, strength = MUTATION_STRENGTH) {
-        const mutateVal = (v) => (Math.random() < rate ? v + (Math.random() * 2 - 1) * strength : v);
-        const mutateArr = (a) => a.map((v) => (Array.isArray(v) ? mutateArr(v) : mutateVal(v)));
-        this.hiddenWeights = mutateArr(this.hiddenWeights);
-        this.hiddenBias = mutateArr(this.hiddenBias);
-        this.outputWeights = mutateArr(this.outputWeights);
-        this.outputBias = mutateArr(this.outputBias);
-    }
-
-    forward(inputs) {
-        const hidden = this.hiddenWeights.map((w, i) =>
-            Math.tanh(w.reduce((s, wt, j) => s + wt * inputs[j], this.hiddenBias[i]))
-        );
-        return this.outputWeights.map((w, i) => w.reduce((s, wt, j) => s + wt * hidden[j], this.outputBias[i]));
-    }
-
-    decide(inputs) {
-        const out = this.forward(inputs);
-        const angle = Math.max(0, Math.min(180, (out[0] + 1) * 90));
-        const power = Math.max(0.3, Math.min(1, (out[1] + 1) / 2));
-        const weaponIndex = out.slice(2).indexOf(Math.max(...out.slice(2)));
-        const weapon = Object.keys(WEAPONS)[weaponIndex];
-        return { angle, power, weapon };
-    }
-
-    toJSON() {
-        return {
-            hiddenWeights: this.hiddenWeights,
-            hiddenBias: this.hiddenBias,
-            outputWeights: this.outputWeights,
-            outputBias: this.outputBias,
-        };
-    }
-}
-
-let trainedNet = null;
-let bestNet = null;
-let bestScore = -Infinity;
-
-function loadTrainedNet() {
-    if (typeof window === 'undefined') {
-        try {
-            const obj = require('../trained_net.json');
-            trainedNet = NeuralNetwork.from(obj);
-            bestNet = trainedNet.clone();
-            bestScore = evaluate(trainedNet);
-        } catch (e) {
-            trainedNet = null;
-        }
-        return Promise.resolve();
-    } else {
-        return fetch('trained_net.json')
-            .then((r) => r.json())
-            .then((j) => {
-                trainedNet = NeuralNetwork.from(j);
-                bestNet = trainedNet.clone();
-                bestScore = evaluate(trainedNet);
-            })
-            .catch(() => {});
-    }
-}
-
-// Generate a random neural network for an AI tank
-function createRandomNet() {
-    return NeuralNetwork.random();
-}
-
-function neuralDecision(net, inputs) {
-    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
-    return nn.decide(inputs);
-}
-
-// ==== Training Functions ====
-const POPULATION = 100;
+// Neural Network parameters
+const INPUT_SIZE = 13;
+const HIDDEN_SIZE = 20;
+const OUTPUT_SIZE = 3;
+const LEARNING_RATE = 0.1;
 const MUTATION_RATE = 0.1;
-const MUTATION_STRENGTH = 0.5;
-const TRAINING_INTERVAL = 250; // faster background evolution
 
-function cloneNet(net) {
-    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
-    return nn.clone();
-}
+// Terrain parameters
+let terrainFreq = 0.02;
+let terrainAmp = 100;
+const TERRAIN_POINTS = 200;
+let terrain = [];
 
-function mutate(net) {
-    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
-    nn.mutate();
-}
+// Tank parameters
+const TANK_WIDTH = 40;
+const TANK_HEIGHT = 25;
+const GRAVITY = 0.2;
+const MAX_POWER = 20;
 
-function generateTrainingTerrain(
-    width = 800,
-    height = 600,
-    amplitude = DEFAULT_TERRAIN_AMPLITUDE,
-    frequency = DEFAULT_TERRAIN_FREQUENCY,
-) {
-    const terrain = [];
-    const segments = Math.floor(width / 10);
-    const base = height - GROUND_HEIGHT;
-    for (let i = 0; i <= segments; i++) {
-        const x = i * 10;
-        const y = base - Math.sin(i * frequency) * amplitude - Math.random() * 20;
-        terrain.push({ x, y });
-    }
-    terrain.amplitude = amplitude;
-    terrain.frequency = frequency;
-    return terrain;
-}
+// Game objects
+let tanks = [];
+let projectiles = [];
+let particles = [];
 
-function getTrainingTerrainHeight(terrain, x, width = 800) {
-    if (x < 0) x = 0;
-    if (x > width) x = width;
-    for (let i = 0; i < terrain.length - 1; i++) {
-        if (x >= terrain[i].x && x <= terrain[i + 1].x) {
-            const r = (x - terrain[i].x) / (terrain[i + 1].x - terrain[i].x);
-            return terrain[i].y + r * (terrain[i + 1].y - terrain[i].y);
-        }
-    }
-    return terrain[terrain.length - 1].y;
-}
+// Neural network storage
+let globalBestModel = null;
+let trainingPool = [];
 
-function simulateShot(net, enemies, terrain = generateTrainingTerrain(), wind = 0) {
-    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
-    const amp = terrain.amplitude || DEFAULT_TERRAIN_AMPLITUDE;
-    const freq = terrain.frequency || DEFAULT_TERRAIN_FREQUENCY;
-    const width = 800;
-    const height = 600;
-    const selfX = 0;
-    const selfY = getTrainingTerrainHeight(terrain, selfX, width);
-
-    const normalizedEnemies = enemies.map((e) => ({
-        x: e.x / width,
-        y: e.y / height,
-        alive: e.alive ? 1 : 0,
-    }));
-    const nearest = enemies
-        .filter((e) => e.alive)
-        .reduce(
-            (a, b) =>
-                Math.abs(a.x - selfX) < Math.abs(b.x - selfX) ? a : b,
-            enemies[0],
-        );
-    const dx = nearest.x - selfX;
-    const dy = nearest.y - selfY;
-
-    const inputs = [
-        dx / width,
-        dy / height,
-        amp / 100,
-        freq,
-        selfX / width,
-        selfY / height,
-        wind,
-        ...normalizedEnemies.flatMap((e) => [e.x, e.y, e.alive]),
-    ];
-    const { angle, power, weapon } = nn.decide(inputs);
-    const rad = (angle * Math.PI) / 180;
-    const w = WEAPONS[weapon];
-    const speed = w.speed * power;
-    let vx = Math.cos(rad) * speed;
-    let vy = -Math.sin(rad) * speed;
-
-    let x = selfX;
-    let y = selfY;
-
-    while (x >= 0 && x <= width && y <= height) {
-        vy += GRAVITY;
-        vx += wind;
-        x += vx;
-        y += vy;
-        const ground = getTrainingTerrainHeight(terrain, x, width);
-        if (y >= ground) {
-            y = ground;
-            break;
-        }
-    }
-
-    let dist = Infinity;
-    let damage = 0;
-    for (const e of enemies) {
-        if (!e.alive) continue;
-        const d = Math.abs(x - e.x);
-        if (d < dist) dist = d;
-        if (d <= w.radius) {
-            const cur = w.damage * (1 - d / w.radius);
-            if (cur > damage) damage = cur;
-        }
-    }
-    const selfDist = Math.abs(x - selfX);
-    let selfDamage = 0;
-    if (selfDist <= w.radius) {
-        selfDamage = w.damage * (1 - selfDist / w.radius);
-    }
-    const closeness = Math.max(0, (w.radius - dist) / w.radius);
-    return damage + closeness * 10 - selfDamage;
-}
-
-function evaluate(net) {
-    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
-    let fitness = 0;
-    for (let i = 0; i < 5; i++) {
-        const terrain = generateTrainingTerrain();
-        const enemies = Array.from({ length: ENEMY_COUNT }, () => {
-            const x = Math.random() * 800;
-            const y = getTrainingTerrainHeight(terrain, x, 800);
-            return { x, y, alive: 1 };
-        });
-        const wind = (Math.random() * 2 - 1) * WIND_MAX;
-        fitness += simulateShot(nn, enemies, terrain, wind);
-    }
-    return fitness / 5;
-}
-
-function evolveStep(population) {
-    const scored = population.map((net) => ({ net, score: evaluate(net) }));
-    scored.sort((a, b) => b.score - a.score);
-    const best = scored[0].net;
-    const survivors = scored.slice(0, POPULATION / 2).map((s) => s.net);
-    const nextPop = survivors.map(cloneNet);
-    while (nextPop.length < POPULATION) {
-        const parent = cloneNet(
-            survivors[Math.floor(Math.random() * survivors.length)],
-        );
-        mutate(parent);
-        nextPop.push(parent);
-    }
-    return { best, nextPop, score: scored[0].score };
-}
-
-function evolve(populationSize = POPULATION, generations = 2000) {
-    let population = Array.from({ length: populationSize }, createRandomNet);
-    if (bestNet) population[0] = cloneNet(bestNet);
-    let genBest = bestNet ? cloneNet(bestNet) : population[0];
-    let genScore = bestNet ? bestScore : evaluate(genBest);
-    for (let g = 0; g < generations; g++) {
-        const result = evolveStep(population);
-        population = result.nextPop;
-        if (result.score > genScore) {
-            genScore = result.score;
-            genBest = cloneNet(result.best);
-        }
-        console.log(
-            `Generation ${g + 1}: best fitness = ${result.score.toFixed(2)}, overall best = ${genScore.toFixed(2)}`,
-        );
-        population[0] = cloneNet(genBest);
-    }
-    bestNet = cloneNet(genBest);
-    bestScore = genScore;
-    trainedNet = cloneNet(genBest);
-    return genBest;
-}
-
-let trainingPopulation = null;
-let trainingGen = 0;
-
-function startBackgroundTraining() {
-    trainingGen = 0;
-    trainingPopulation = [];
-    if (trainedNet) {
-        bestNet = cloneNet(trainedNet);
-        bestScore = evaluate(trainedNet);
-        for (let i = 0; i < POPULATION; i++) {
-            const net = cloneNet(trainedNet);
-            if (i !== 0) mutate(net);
-            trainingPopulation.push(net);
-        }
-    } else {
-        trainingPopulation = Array.from({ length: POPULATION }, createRandomNet);
-        bestNet = cloneNet(trainingPopulation[0]);
-        bestScore = evaluate(bestNet);
-    }
-    const trainStep = () => {
-        const result = evolveStep(trainingPopulation);
-        trainingPopulation = result.nextPop;
-        if (result.score > bestScore) {
-            bestScore = result.score;
-            bestNet = cloneNet(result.best);
-        }
-        trainedNet = cloneNet(bestNet);
-        trainingPopulation[0] = cloneNet(bestNet);
-        trainingGen++;
-        if (tanks) {
-            tanks.forEach((t) => {
-                if (t.ai) t.aiNet = cloneNet(bestNet);
-            });
-        }
-        console.log(
-            `Background generation ${trainingGen} complete, best fitness = ${result.score.toFixed(2)}, overall best = ${bestScore.toFixed(2)}`,
-        );
-    };
-    setInterval(trainStep, TRAINING_INTERVAL);
-}
-
-let canvas,
-    ctx,
-    terrain,
-    tanks,
-    projectiles,
-    explosions,
-    timer,
-    turnInProgress,
-    gameOver,
-    aiDecisions,
-    hasPlayer = true,
-    loopStarted = false,
-    eventsBound = false;
-
-function init(player = true) {
-    canvas = document.getElementById("gameCanvas");
-    ctx = canvas.getContext("2d");
-    hasPlayer = player;
-    projectiles = [];
-    explosions = [];
-    gameOver = false;
-    resize();
-    generateTerrain();
-    createTanks(player);
-    updateUI();
-    if (!eventsBound) {
-        bindUI();
-        eventsBound = true;
-    }
-    document.getElementById("controls").style.display = hasPlayer
-        ? "block"
-        : "none";
-    document.getElementById("timerBar").style.display = hasPlayer
-        ? "block"
-        : "none";
-    if (!loopStarted) {
-        gameLoop();
-        loopStarted = true;
-    }
-    startTurn();
-}
-
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - 260;
-}
-
-function generateTerrain(amplitude = DEFAULT_TERRAIN_AMPLITUDE, frequency = DEFAULT_TERRAIN_FREQUENCY) {
-    currentAmplitude = amplitude;
-    currentFrequency = frequency;
+// Initialize terrain
+function generateTerrain() {
     terrain = [];
-    const segments = Math.floor(canvas.width / 10);
-    const base = canvas.height - GROUND_HEIGHT;
-    for (let i = 0; i <= segments; i++) {
-        const x = i * 10;
-        const y = base - Math.sin(i * frequency) * amplitude - Math.random() * 20;
-        terrain.push({ x, y });
+    terrainFreq = 0.015 + Math.random() * 0.02;
+    terrainAmp = 80 + Math.random() * 120;
+    
+    for (let i = 0; i <= TERRAIN_POINTS; i++) {
+        const x = (i / TERRAIN_POINTS) * canvas.width;
+        const y = canvas.height - 50 - Math.sin(x * terrainFreq) * terrainAmp;
+        terrain.push({x, y});
     }
-    terrain.amplitude = amplitude;
-    terrain.frequency = frequency;
 }
 
-function createTanks(player = true) {
-    tanks = [];
-    // Spawn tanks at random horizontal positions across the battlefield
-    const positions = Array.from({ length: 4 }, () => Math.random() * 0.8 + 0.1).sort();
-    const colors = ["#00ff00", "#00aa00", "#008800", "#006600"];
-    for (let i = 0; i < 4; i++) {
-        const isPlayer = player && i === 0;
-        tanks.push({
-            id: i,
-            name: isPlayer ? "Player" : `AI-${player ? i : i + 1}`,
-            x: canvas.width * positions[i],
-            y: 0,
-            width: TANK_WIDTH,
-            height: TANK_HEIGHT,
-            health: 100,
-            maxHealth: 100,
-            alive: true,
-            color: colors[i],
-            ai: !isPlayer,
-            sensors: {
-                amplitude: 0,
-                frequency: 0,
-                selfX: 0,
-                selfY: 0,
-                wind: 0,
-                enemies: Array.from({ length: ENEMY_COUNT }, () => ({
-                    x: 0,
-                    y: 0,
-                    alive: 0,
-                })),
-            },
-            aiNet: !isPlayer
-                ? trainedNet
-                    ? trainedNet.clone()
-                    : createRandomNet()
-                : null,
+// Neural Network class
+class NeuralNetwork {
+    constructor(inputSize, hiddenSize, outputSize) {
+        this.weights1 = this.randomMatrix(inputSize, hiddenSize);
+        this.bias1 = this.randomMatrix(1, hiddenSize);
+        this.weights2 = this.randomMatrix(hiddenSize, outputSize);
+        this.bias2 = this.randomMatrix(1, outputSize);
+    }
+    
+    randomMatrix(rows, cols) {
+        return Array(rows).fill().map(() => 
+            Array(cols).fill().map(() => (Math.random() - 0.5) * 2)
+        );
+    }
+    
+    sigmoid(x) {
+        return 1 / (1 + Math.exp(-x));
+    }
+    
+    forward(inputs) {
+        // Normalize inputs
+        inputs = inputs.map((val, idx) => {
+            if (idx < 12) return val / canvas.width; // Positions
+            if (idx === 12) return val / 0.03; // Frequency
+            return val / 200; // Amplitude
         });
+        
+        // Hidden layer
+        let hidden = inputs.map((_, i) => 
+            this.weights1[i].reduce((sum, w, j) => sum + w * inputs[j], 0) + this.bias1[0][i]
+        ).map(this.sigmoid);
+        
+        // Output layer
+        let outputs = this.weights2[0].map((_, j) =>
+            hidden.reduce((sum, h, i) => sum + h * this.weights2[i][j], 0) + this.bias2[0][j]
+        ).map(this.sigmoid);
+        
+        return outputs;
     }
-    placeTanks();
-}
-
-function placeTanks() {
-    tanks.forEach((t) => {
-        for (let i = 0; i < terrain.length - 1; i++) {
-            if (t.x >= terrain[i].x && t.x <= terrain[i + 1].x) {
-                const ratio =
-                    (t.x - terrain[i].x) / (terrain[i + 1].x - terrain[i].x);
-                t.y =
-                    terrain[i].y +
-                    ratio * (terrain[i + 1].y - terrain[i].y) -
-                    t.height;
-                break;
-            }
-        }
-    });
-}
-
-function bindUI() {
-    const wSel = document.getElementById("weaponSelect");
-    const aSl = document.getElementById("angleSlider");
-    const pSl = document.getElementById("powerSlider");
-    const aVal = document.getElementById("angleValue");
-    const pVal = document.getElementById("powerValue");
-    const wInfo = document.getElementById("weaponInfo");
-    aSl.addEventListener("input", () => (aVal.textContent = aSl.value));
-    pSl.addEventListener("input", () => (pVal.textContent = pSl.value));
-    wSel.addEventListener(
-        "change",
-        () => (wInfo.textContent = WEAPONS[wSel.value].description),
-    );
-    document.getElementById("fireButton").addEventListener("click", playerFire);
-    window.addEventListener("resize", () => {
-        resize();
-        generateTerrain();
-        placeTanks();
-    });
-}
-
-function startTurn() {
-    if (gameOver) return;
-    currentWind = (Math.random() * 2 - 1) * WIND_MAX;
-    const turnTime = hasPlayer ? TURN_TIME : DEMO_TURN_TIME;
-    timer = turnTime;
-    turnInProgress = false;
-    aiDecisions = [];
-    const interval = setInterval(() => {
-        timer -= 0.1;
-        document.getElementById("timerFill").style.width =
-            (timer / turnTime) * 100 + "%";
-        if (timer <= 0) {
-            clearInterval(interval);
-            hasPlayer && tanks[0].alive ? playerFire() : processAITurn();
-        }
-    }, 100);
-    const startIdx = hasPlayer ? 1 : 0;
-    tanks.slice(startIdx).forEach((t, i) => t.alive && makeAIDecision(startIdx + i));
-}
-
-function playerFire() {
-    if (!hasPlayer || turnInProgress || !tanks[0].alive) return;
-    const w = document.getElementById("weaponSelect").value;
-    const a = +document.getElementById("angleSlider").value;
-    const p = +document.getElementById("powerSlider").value / 100;
-    fireProjectile(tanks[0], w, a, p);
-    processAITurn();
-}
-
-function makeAIDecision(id) {
-    const tank = tanks[id];
-    if (!tank.alive) return;
-    updateSensors(tank);
-    const targets = tanks.filter((t) => t.id !== id && t.alive);
-    if (!targets.length) return;
-    const target = targets.reduce((a, b) =>
-        Math.abs(a.x - tank.x) < Math.abs(b.x - tank.x) ? a : b,
-    );
-    const dx = target.x - tank.x;
-    const dy = target.y - tank.y;
-    const enemyInputs = tank.sensors.enemies.flatMap((e) => [e.x, e.y, e.alive]);
-    const inputs = [
-        dx / canvas.width,
-        dy / canvas.height,
-        tank.sensors.amplitude,
-        tank.sensors.frequency,
-        tank.sensors.selfX,
-        tank.sensors.selfY,
-        tank.sensors.wind,
-        ...enemyInputs,
-    ];
-    const { angle, power, weapon } = neuralDecision(tank.aiNet, inputs);
-    aiDecisions.push({ tank, weapon, angle, power });
-}
-
-function processAITurn() {
-    if (turnInProgress) return;
-    turnInProgress = true;
-    aiDecisions.forEach((d) =>
-        fireProjectile(d.tank, d.weapon, d.angle, d.power),
-    );
-    const wait = setInterval(() => {
-        if (!projectiles.length && !explosions.length) {
-            clearInterval(wait);
-            checkGameOver();
-            if (!gameOver) setTimeout(startTurn, 1000);
-        }
-    }, 100);
-}
-
-function fireProjectile(tank, type, angle, power) {
-    const w = WEAPONS[type];
-    const rad = (angle * Math.PI) / 180;
-    const speed = w.speed * power;
-    const barrel = 30;
-    const x = tank.x + Math.cos(rad) * barrel;
-    const y = tank.y - Math.sin(rad) * barrel;
-    const create = (vx, vy) =>
-        projectiles.push({
-            x,
-            y,
-            vx,
-            vy,
-            weapon: type,
-            damage: w.damage,
-            radius: w.radius,
-            bounces: w.bounces || 0,
-            bouncesLeft: w.bounces || 0,
-            owner: tank.id,
-        });
-    if (type === "rapid") {
-        for (let i = 0; i < w.shots; i++)
-            setTimeout(
-                () => create(Math.cos(rad) * speed, -Math.sin(rad) * speed),
-                i * 200,
-            );
-    } else if (type === "triple") {
-        for (let i = -1; i <= 1; i++)
-            create(
-                Math.cos(rad + i * w.spread) * speed,
-                -Math.sin(rad + i * w.spread) * speed,
-            );
-    } else {
-        create(Math.cos(rad) * speed, -Math.sin(rad) * speed);
+    
+    mutate(rate = MUTATION_RATE) {
+        const mutate = (val) => Math.random() < rate ? val + (Math.random() - 0.5) * 0.5 : val;
+        
+        this.weights1 = this.weights1.map(row => row.map(mutate));
+        this.bias1 = this.bias1.map(row => row.map(mutate));
+        this.weights2 = this.weights2.map(row => row.map(mutate));
+        this.bias2 = this.bias2.map(row => row.map(mutate));
+    }
+    
+    copyFrom(other) {
+        this.weights1 = JSON.parse(JSON.stringify(other.weights1));
+        this.bias1 = JSON.parse(JSON.stringify(other.bias1));
+        this.weights2 = JSON.parse(JSON.stringify(other.weights2));
+        this.bias2 = JSON.parse(JSON.stringify(other.bias2));
     }
 }
 
-function getTerrainHeight(x) {
-    if (x < 0) x = 0;
-    if (x > canvas.width) x = canvas.width;
-    for (let i = 0; i < terrain.length - 1; i++) {
-        if (x >= terrain[i].x && x <= terrain[i + 1].x) {
-            const r = (x - terrain[i].x) / (terrain[i + 1].x - terrain[i].x);
-            return terrain[i].y + r * (terrain[i + 1].y - terrain[i].y);
+// Tank class
+class Tank {
+    constructor(x, y, color, id) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.id = id;
+        this.health = 100;
+        this.alive = true;
+        this.angle = -Math.PI / 4;
+        this.power = 10;
+        this.weapon = 0; // 0 = shell, 1 = shotgun
+        this.brain = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+        this.fitness = 0;
+        this.lastDamage = 0;
+        this.shotsFired = 0;
+    }
+    
+    updateBrain() {
+        if (globalBestModel) {
+            this.brain.copyFrom(globalBestModel);
+            this.brain.mutate();
         }
     }
-    return canvas.height - GROUND_HEIGHT;
-}
-
-function updateSensors(tank) {
-    tank.sensors.amplitude = currentAmplitude / 100;
-    tank.sensors.frequency = currentFrequency;
-    tank.sensors.selfX = tank.x / canvas.width;
-    tank.sensors.selfY = tank.y / canvas.height;
-    tank.sensors.wind = currentWind;
-    const others = tanks.filter((t) => t.id !== tank.id).sort((a, b) => a.id - b.id);
-    for (let i = 0; i < ENEMY_COUNT; i++) {
-        const enemy = others[i];
-        if (enemy && enemy.alive) {
-            tank.sensors.enemies[i].x = enemy.x / canvas.width;
-            tank.sensors.enemies[i].y = enemy.y / canvas.height;
-            tank.sensors.enemies[i].alive = 1;
+    
+    think() {
+        if (!this.alive) return;
+        
+        const inputs = [
+            this.x,
+            this.y,
+            ...tanks.filter(t => t.id !== this.id).flatMap(t => [t.x, t.y, t.alive ? 1 : 0]),
+            terrainFreq,
+            terrainAmp
+        ];
+        
+        const outputs = this.brain.forward(inputs);
+        
+        this.angle = (outputs[0] - 0.5) * Math.PI;
+        this.power = outputs[1] * MAX_POWER;
+        this.weapon = outputs[2] > 0.5 ? 1 : 0;
+    }
+    
+    fire() {
+        if (!this.alive) return;
+        
+        this.shotsFired++;
+        const velocity = {
+            x: Math.cos(this.angle) * this.power,
+            y: Math.sin(this.angle) * this.power
+        };
+        
+        if (this.weapon === 0) {
+            // Standard shell
+            projectiles.push(new Projectile(
+                this.x + TANK_WIDTH/2,
+                this.y - TANK_HEIGHT,
+                velocity.x,
+                velocity.y,
+                15,
+                this.id
+            ));
         } else {
-            tank.sensors.enemies[i].x = 0;
-            tank.sensors.enemies[i].y = 0;
-            tank.sensors.enemies[i].alive = 0;
+            // Shotgun
+            const spread = 0.2;
+            for (let i = -1; i <= 1; i++) {
+                const spreadAngle = this.angle + i * spread;
+                const spreadVelocity = {
+                    x: Math.cos(spreadAngle) * this.power,
+                    y: Math.sin(spreadAngle) * this.power
+                };
+                projectiles.push(new Projectile(
+                    this.x + TANK_WIDTH/2,
+                    this.y - TANK_HEIGHT,
+                    spreadVelocity.x,
+                    spreadVelocity.y,
+                    5,
+                    this.id
+                ));
+            }
         }
+    }
+    
+    takeDamage(amount, sourceId) {
+        this.health -= amount;
+        this.lastDamage = amount;
+        
+        if (sourceId === this.id) {
+            this.fitness -= amount * 2; // Penalty for self-damage
+        } else {
+            this.fitness += amount; // Reward when damaged by others
+            const source = tanks.find(t => t.id === sourceId);
+            if (source) {
+                source.fitness += amount * 1.5; // Bonus for dealing damage
+            }
+        }
+        
+        if (this.health <= 0) {
+            this.health = 0;
+            this.alive = false;
+        }
+        
+        // Add damage particles
+        for (let i = 0; i < 5; i++) {
+            particles.push(new Particle(
+                this.x + TANK_WIDTH/2 + (Math.random() - 0.5) * TANK_WIDTH,
+                this.y - TANK_HEIGHT/2,
+                (Math.random() - 0.5) * 5,
+                -Math.random() * 5,
+                '#ff4444'
+            ));
+        }
+    }
+    
+    draw() {
+        if (!this.alive) return;
+        
+        ctx.save();
+        ctx.translate(this.x + TANK_WIDTH/2, this.y - TANK_HEIGHT/2);
+        
+        // Tank body
+        ctx.fillStyle = this.color;
+        ctx.fillRect(-TANK_WIDTH/2, -TANK_HEIGHT/2, TANK_WIDTH, TANK_HEIGHT);
+        
+        // Tank barrel
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(this.angle) * 30, Math.sin(this.angle) * 30);
+        ctx.stroke();
+        
+        // Health bar
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-TANK_WIDTH/2, -TANK_HEIGHT/2 - 15, TANK_WIDTH, 8);
+        ctx.fillStyle = this.health > 50 ? '#00ff00' : this.health > 25 ? '#ffff00' : '#ff0000';
+        ctx.fillRect(-TANK_WIDTH/2, -TANK_HEIGHT/2 - 15, TANK_WIDTH * (this.health / 100), 8);
+        
+        ctx.restore();
+        
+        // Draw tank ID
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Tank ${this.id}`, this.x + TANK_WIDTH/2, this.y + 15);
     }
 }
 
-function updateProjectiles() {
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-        const p = projectiles[i];
-        p.vy += GRAVITY;
-        p.vx += currentWind;
-        p.x += p.vx;
-        p.y += p.vy;
-        if (p.y >= getTerrainHeight(p.x)) {
-            if (p.bouncesLeft > 0) {
-                p.y = getTerrainHeight(p.x);
-                p.vy *= -0.7;
-                p.vx *= 0.9;
-                p.bouncesLeft--;
-            } else {
-                createExplosion(p.x, p.y, p.radius, p.damage, p.owner);
-                projectiles.splice(i, 1);
-                continue;
-            }
-        }
-        for (const t of tanks) {
-            if (
-                t.alive &&
-                p.x >= t.x - t.width / 2 &&
-                p.x <= t.x + t.width / 2 &&
-                p.y >= t.y - t.height &&
-                p.y <= t.y
-            ) {
-                createExplosion(t.x, t.y, p.radius, p.damage, p.owner);
-                projectiles.splice(i, 1);
-                break;
-            }
-        }
-        if (p.x < 0 || p.x > canvas.width || p.y > canvas.height)
-            projectiles.splice(i, 1);
+// Projectile class
+class Projectile {
+    constructor(x, y, vx, vy, damage, ownerId) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.damage = damage;
+        this.ownerId = ownerId;
+        this.active = true;
     }
-    for (let i = explosions.length - 1; i >= 0; i--) {
-        const e = explosions[i];
-        e.timer--;
-        if (e.timer <= 0) {
-            tanks.forEach((t) => {
-                if (t.alive) {
-                    const d = Math.hypot(t.x - e.x, t.y - e.y);
-                    if (d <= e.radius) {
-                        t.health -= Math.floor(e.damage * (1 - d / e.radius));
-                        t.health = Math.max(0, t.health);
-                        if (t.health === 0) {
-                            t.alive = false;
-                            showMessage(
-                                `${tanks[e.owner].name} destroyed ${t.name}!`,
-                            );
-                        }
+    
+    update() {
+        if (!this.active) return;
+        
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += GRAVITY;
+        
+        // Check terrain collision
+        const terrainY = this.getTerrainY(this.x);
+        if (this.y >= terrainY) {
+            this.explode();
+            this.destroyTerrain(this.x, terrainY);
+        }
+        
+        // Check bounds
+        if (this.x < 0 || this.x > canvas.width || this.y > canvas.height) {
+            this.active = false;
+        }
+        
+        // Check tank collision
+        tanks.forEach(tank => {
+            if (tank.alive && this.active &&
+                this.x >= tank.x && this.x <= tank.x + TANK_WIDTH &&
+                this.y >= tank.y - TANK_HEIGHT && this.y <= tank.y) {
+                tank.takeDamage(this.damage, this.ownerId);
+                this.explode();
+                this.active = false;
+            }
+        });
+    }
+    
+    getTerrainY(x) {
+        const index = Math.floor((x / canvas.width) * TERRAIN_POINTS);
+        if (index < 0 || index >= terrain.length) return canvas.height;
+        return terrain[index].y;
+    }
+    
+    destroyTerrain(x, y) {
+        const destroyRadius = 20 + this.damage / 5;
+        
+        for (let i = 0; i < terrain.length; i++) {
+            const distance = Math.sqrt(
+                Math.pow(terrain[i].x - x, 2) + 
+                Math.pow(terrain[i].y - y, 2)
+            );
+            
+            if (distance < destroyRadius) {
+                terrain[i].y += destroyRadius - distance;
+            }
+        }
+        
+        // Update tank positions based on new terrain
+        tanks.forEach(tank => {
+            if (tank.alive) {
+                tank.y = this.getTerrainY(tank.x + TANK_WIDTH/2);
+            }
+        });
+        
+        // Add explosion particles
+        for (let i = 0; i < 10; i++) {
+            particles.push(new Particle(
+                x + (Math.random() - 0.5) * destroyRadius * 2,
+                y + (Math.random() - 0.5) * destroyRadius * 2,
+                (Math.random() - 0.5) * 10,
+                -Math.random() * 10,
+                '#ff6600'
+            ));
+        }
+    }
+    
+    explode() {
+        // Create explosion effect
+        const explosion = {
+            x: this.x,
+            y: this.y,
+            radius: 0,
+            maxRadius: 15 + this.damage / 5,
+            alpha: 1
+        };
+        
+        const animateExplosion = () => {
+            explosion.radius += 2;
+            explosion.alpha -= 0.05;
+            
+            if (explosion.alpha > 0) {
+                requestAnimationFrame(animateExplosion);
+            }
+            
+            ctx.save();
+            ctx.globalAlpha = explosion.alpha;
+            ctx.fillStyle = '#ff6600';
+            ctx.beginPath();
+            ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        };
+        
+        animateExplosion();
+    }
+    
+    draw() {
+        if (!this.active) return;
+        
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+// Particle class for effects
+class Particle {
+    constructor(x, y, vx, vy, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.color = color;
+        this.life = 30;
+        this.maxLife = 30;
+    }
+    
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.1;
+        this.life--;
+        
+        if (this.life <= 0) {
+            const index = particles.indexOf(this);
+            if (index > -1) particles.splice(index, 1);
+        }
+    }
+    
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life / this.maxLife;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+// Initialize game
+function initGame() {
+    generateTerrain();
+    tanks = [];
+    projectiles = [];
+    particles = [];
+    
+    const colors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44'];
+    for (let i = 0; i < 4; i++) {
+        const x = (i + 1) * canvas.width / 5 - TANK_WIDTH/2;
+        const y = terrain[Math.floor((i + 1) * TERRAIN_POINTS / 5)].y;
+        tanks.push(new Tank(x, y, colors[i], i + 1));
+        tanks[i].updateBrain();
+    }
+    
+    // Initialize training pool
+    trainingPool = Array(50).fill().map(() => new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE));
+    
+    updateStats();
+}
+
+// Training simulation
+function simulateTraining() {
+    if (!globalBestModel) {
+        globalBestModel = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+        return;
+    }
+    
+    // Run simulation battles for training
+    for (let sim = 0; sim < 10; sim++) {
+        let simTanks = [
+            new Tank(100, 300, '#ff4444', 1),
+            new Tank(300, 300, '#44ff44', 2),
+            new Tank(500, 300, '#4444ff', 3),
+            new Tank(700, 300, '#ffff44', 4)
+        ];
+        
+        simTanks.forEach((tank, i) => {
+            tank.brain.copyFrom(trainingPool[Math.floor(Math.random() * trainingPool.length)]);
+        });
+        
+        // Run quick simulation
+        for (let round = 0; round < 5; round++) {
+            simTanks.forEach(tank => {
+                if (tank.alive) {
+                    const inputs = [
+                        tank.x,
+                        tank.y,
+                        ...simTanks.filter(t => t.id !== tank.id).flatMap(t => [t.x, t.y, t.alive ? 1 : 0]),
+                        terrainFreq,
+                        terrainAmp
+                    ];
+                    
+                    const outputs = tank.brain.forward(inputs);
+                    tank.angle = (outputs[0] - 0.5) * Math.PI;
+                    tank.power = outputs[1] * MAX_POWER;
+                    
+                    // Simulate shot
+                    const target = simTanks.find(t => t.id !== tank.id && t.alive);
+                    if (target) {
+                        const distance = Math.sqrt(
+                            Math.pow(target.x - tank.x, 2) + 
+                            Math.pow(target.y - tank.y, 2)
+                        );
+                        tank.fitness += Math.max(0, 100 - distance);
                     }
                 }
             });
-            terrain.forEach((pt) => {
-                const d = Math.hypot(pt.x - e.x, pt.y - e.y);
-                if (d <= e.radius) pt.y += e.radius - d;
-            });
-            explosions.splice(i, 1);
-            updateUI();
-            placeTanks();
         }
+        
+        // Update training pool with best performers
+        simTanks.sort((a, b) => b.fitness - a.fitness);
+        trainingPool[Math.floor(Math.random() * trainingPool.length)].copyFrom(simTanks[0].brain);
     }
+    
+    // Update global best model
+    globalBestModel.copyFrom(trainingPool.reduce((best, current) => {
+        // Simple fitness evaluation for training pool
+        return Math.random() > 0.5 ? current : best;
+    }));
 }
 
-function createExplosion(x, y, r, d, o) {
-    explosions.push({ x, y, radius: r, damage: d, owner: o, timer: 20 });
-}
-
-function checkGameOver() {
-    const alive = tanks.filter((t) => t.alive);
-    if (alive.length <= 1) {
-        gameOver = true;
-        showMessage(alive.length ? `${alive[0].name} wins!` : "Draw!");
-    }
-}
-
-function showMessage(msg) {
-    const box = document.getElementById("messageBox");
-    box.textContent = msg;
-    box.style.display = "block";
-    setTimeout(() => (box.style.display = "none"), 3000);
-}
-
-function startGame() {
-    const screen = document.getElementById("startScreen");
-    if (screen) screen.style.display = "none";
-    init(true);
-}
-
-function updateUI() {
-    tanks.forEach((t) => {
-        const prefix = t.id === 0 ? "player" : `ai${t.id}`;
-        const stat = document.getElementById(`${prefix}-stat`);
-        const healthSpan = document.getElementById(`${prefix}-health`);
-        if (!stat || !healthSpan) return;
-        const nameEl = stat.querySelector(".tank-name");
-        if (nameEl) nameEl.textContent = t.name;
-        healthSpan.textContent = t.health;
-        const fill = stat.querySelector(".health-fill");
-        if (fill) fill.style.width = `${(t.health / t.maxHealth) * 100}%`;
-        stat.classList.toggle("dead", !t.alive);
-    });
-}
-
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.beginPath();
-    ctx.moveTo(terrain[0].x, terrain[0].y);
-    terrain.forEach((p) => ctx.lineTo(p.x, p.y));
-    ctx.lineTo(canvas.width, canvas.height);
-    ctx.lineTo(0, canvas.height);
-    ctx.closePath();
-    ctx.fillStyle = "#00ff00";
-    ctx.fill();
-    tanks.forEach((t) => {
-        if (t.alive) {
-            ctx.fillStyle = t.color;
-            ctx.fillRect(t.x - t.width / 2, t.y - t.height, t.width, t.height);
-            ctx.fillStyle = "#000";
-            ctx.fillRect(t.x - 2, t.y - t.height - 10, 4, 10);
-            ctx.fillStyle = "#000";
-            ctx.font = "12px 'Courier New', monospace";
-            ctx.textAlign = "center";
-            ctx.fillText(t.name, t.x, t.y - t.height + 12);
-        }
-    });
-    ctx.fillStyle = "#00ff00";
-    projectiles.forEach((p) => ctx.fillRect(p.x - 2, p.y - 2, 4, 4));
-    explosions.forEach((e) => {
-        const r = e.radius * (1 - e.timer / 20);
-        ctx.beginPath();
-        ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0, 255, 0, ${1 - e.timer / 20})`;
-        ctx.fill();
-    });
-}
-
+// Game loop
 function gameLoop() {
-    updateProjectiles();
-    draw();
+    if (!isPaused) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw terrain
+        ctx.fillStyle = '#8B4513';
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height);
+        terrain.forEach(point => ctx.lineTo(point.x, point.y));
+        ctx.lineTo(canvas.width, canvas.height);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Update and draw particles
+        particles.forEach(p => {
+            p.update();
+            p.draw();
+        });
+        
+        // Tank decision phase every 60 frames
+        if (frameCount % 60 === 0) {
+            tanks.forEach(tank => tank.think());
+            
+            // All tanks fire at once
+            tanks.forEach(tank => tank.fire());
+        }
+        
+        // Update and draw projectiles
+        projectiles.forEach(p => {
+            p.update();
+            p.draw();
+        });
+        
+        // Remove inactive projectiles
+        projectiles = projectiles.filter(p => p.active);
+        
+        // Draw tanks
+        tanks.forEach(tank => tank.draw());
+        
+        // Update stats
+        if (frameCount % 30 === 0) {
+            updateStats();
+        }
+        
+        // Training simulation
+        if (frameCount % 300 === 0) {
+            simulateTraining();
+            tanks.forEach(tank => tank.updateBrain());
+            generation++;
+        }
+        
+        // Check for game end
+        const aliveTanks = tanks.filter(t => t.alive);
+        if (aliveTanks.length <= 1 && frameCount > 60) {
+            resetGame();
+        }
+        
+        frameCount++;
+    }
+    
     requestAnimationFrame(gameLoop);
 }
 
-if (typeof module !== 'undefined') {
-    // Export parts of the game logic for Node usage
-    module.exports = {
-        WEAPONS,
-        createRandomNet,
-        neuralDecision,
-        GRAVITY,
-        HIDDEN_WEIGHTS,
-        INPUT_SIZE,
-        loadTrainedNet,
-        evolve,
-        startBackgroundTraining,
-        // expose for testing
-        evaluate,
-        simulateShot,
-        NeuralNetwork,
-    };
-} else {
-    window.onload = () => {
-        loadTrainedNet().then(() => {
-            init(false);
-            startBackgroundTraining();
-            const btn = document.getElementById("startButton");
-            if (btn) btn.addEventListener("click", startGame);
-        });
-    };
+function updateStats() {
+    const statsDiv = document.getElementById('stats');
+    statsDiv.innerHTML = '';
+    
+    tanks.forEach(tank => {
+        const div = document.createElement('div');
+        div.className = 'tank-stats';
+        div.innerHTML = `
+            <h3 style="color: ${tank.color}">Tank ${tank.id}</h3>
+            <p>Health: ${tank.health}</p>
+            <p>Fitness: ${tank.fitness.toFixed(1)}</p>
+            <p>Weapon: ${tank.weapon === 0 ? 'Shell' : 'Shotgun'}</p>
+            <p>Status: ${tank.alive ? 'Alive' : 'Destroyed'}</p>
+        `;
+        statsDiv.appendChild(div);
+    });
+    
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'tank-stats';
+    infoDiv.innerHTML = `
+        <h3>Game Info</h3>
+        <p>Generation: ${generation}</p>
+        <p>Frame: ${frameCount}</p>
+        <p>Terrain Freq: ${terrainFreq.toFixed(3)}</p>
+        <p>Terrain Amp: ${terrainAmp.toFixed(0)}</p>
+    `;
+    statsDiv.appendChild(infoDiv);
 }
+
+function togglePause() {
+    isPaused = !isPaused;
+}
+
+function resetGame() {
+    frameCount = 0;
+    initGame();
+}
+
+function toggleSpeed() {
+    gameSpeed = gameSpeed === 1 ? 3 : gameSpeed === 3 ? 0.5 : 1;
+    document.getElementById('speedDisplay').textContent = gameSpeed + 'x';
+}
+
+// Start game
+initGame();
+gameLoop();
