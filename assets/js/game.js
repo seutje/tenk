@@ -5,6 +5,7 @@ const DEMO_TURN_TIME = 1;
 const GROUND_HEIGHT = 100;
 const TANK_WIDTH = 40;
 const TANK_HEIGHT = 20;
+const HIDDEN_WEIGHTS = 8;
 
 const WEAPONS = {
     standard: {
@@ -50,18 +51,18 @@ const WEAPONS = {
 
 class NeuralNetwork {
     constructor({ hiddenWeights, hiddenBias, outputWeights, outputBias } = {}) {
-        this.hiddenWeights = hiddenWeights || Array.from({ length: 3 }, () => Array(5).fill(0));
-        this.hiddenBias = hiddenBias || Array(3).fill(0);
-        this.outputWeights = outputWeights || Array.from({ length: 7 }, () => Array(3).fill(0));
+        this.hiddenWeights = hiddenWeights || Array.from({ length: HIDDEN_WEIGHTS }, () => Array(5).fill(0));
+        this.hiddenBias = hiddenBias || Array(HIDDEN_WEIGHTS).fill(0);
+        this.outputWeights = outputWeights || Array.from({ length: 7 }, () => Array(HIDDEN_WEIGHTS).fill(0));
         this.outputBias = outputBias || Array(7).fill(0);
     }
 
     static random() {
         const rand = () => Math.random() * 2 - 1;
         return new NeuralNetwork({
-            hiddenWeights: Array.from({ length: 3 }, () => Array.from({ length: 5 }, rand)),
-            hiddenBias: Array.from({ length: 3 }, () => rand() / 2),
-            outputWeights: Array.from({ length: 7 }, () => Array.from({ length: 3 }, rand)),
+            hiddenWeights: Array.from({ length: HIDDEN_WEIGHTS }, () => Array.from({ length: 5 }, rand)),
+            hiddenBias: Array.from({ length: HIDDEN_WEIGHTS }, () => rand() / 2),
+            outputWeights: Array.from({ length: 7 }, () => Array.from({ length: HIDDEN_WEIGHTS }, rand)),
             outputBias: Array.from({ length: 7 }, () => rand() / 2),
         });
     }
@@ -686,6 +687,7 @@ if (typeof module !== 'undefined') {
         createRandomNet,
         neuralDecision,
         GRAVITY,
+        HIDDEN_WEIGHTS,
         loadTrainedNet,
         evolve,
         startBackgroundTraining,
