@@ -48,11 +48,15 @@ const WEAPONS = {
 };
 
 let trainedNet = null;
+let bestNet = null;
+let bestScore = -Infinity;
 
 function loadTrainedNet() {
     if (typeof window === 'undefined') {
         try {
             trainedNet = require('../trained_net.json');
+            bestNet = cloneNet(trainedNet);
+            bestScore = evaluate(trainedNet);
         } catch (e) {
             trainedNet = null;
         }
@@ -62,6 +66,8 @@ function loadTrainedNet() {
             .then((r) => r.json())
             .then((j) => {
                 trainedNet = j;
+                bestNet = cloneNet(trainedNet);
+                bestScore = evaluate(trainedNet);
             })
             .catch(() => {});
     }
@@ -165,38 +171,66 @@ function evolveStep(population) {
 
 function evolve(populationSize = POPULATION, generations = 50) {
     let population = Array.from({ length: populationSize }, createRandomNet);
-    let best = population[0];
+    if (bestNet) population[0] = cloneNet(bestNet);
+    let genBest = bestNet ? cloneNet(bestNet) : population[0];
+    let genScore = bestNet ? bestScore : evaluate(genBest);
     for (let g = 0; g < generations; g++) {
         const result = evolveStep(population);
         population = result.nextPop;
-        best = result.best;
+        if (result.score > genScore) {
+            genScore = result.score;
+            genBest = cloneNet(result.best);
+        }
         console.log(
-            `Generation ${g + 1}: best fitness = ${result.score.toFixed(2)}`,
+            `Generation ${g + 1}: best fitness = ${result.score.toFixed(2)}, overall best = ${genScore.toFixed(2)}`,
         );
+        population[0] = cloneNet(genBest);
     }
-    return best;
+    bestNet = cloneNet(genBest);
+    bestScore = genScore;
+    trainedNet = cloneNet(genBest);
+    return genBest;
 }
 
 let trainingPopulation = null;
 let trainingGen = 0;
 
 function startBackgroundTraining() {
-    trainingPopulation = Array.from({ length: POPULATION }, createRandomNet);
-    if (trainedNet) trainingPopulation[0] = cloneNet(trainedNet);
-    setInterval(() => {
+    trainingGen = 0;
+    trainingPopulation = [];
+    if (trainedNet) {
+        bestNet = cloneNet(trainedNet);
+        bestScore = evaluate(trainedNet);
+        for (let i = 0; i < POPULATION; i++) {
+            const net = cloneNet(trainedNet);
+            if (i !== 0) mutate(net);
+            trainingPopulation.push(net);
+        }
+    } else {
+        trainingPopulation = Array.from({ length: POPULATION }, createRandomNet);
+        bestNet = cloneNet(trainingPopulation[0]);
+        bestScore = evaluate(bestNet);
+    }
+    const trainStep = () => {
         const result = evolveStep(trainingPopulation);
         trainingPopulation = result.nextPop;
-        trainedNet = cloneNet(result.best);
+        if (result.score > bestScore) {
+            bestScore = result.score;
+            bestNet = cloneNet(result.best);
+        }
+        trainedNet = cloneNet(bestNet);
+        trainingPopulation[0] = cloneNet(bestNet);
         trainingGen++;
         if (tanks) {
             tanks.forEach((t) => {
-                if (t.ai) t.aiNet = cloneNet(trainedNet);
+                if (t.ai) t.aiNet = cloneNet(bestNet);
             });
         }
         console.log(
-            `Background generation ${trainingGen} complete, best fitness = ${result.score.toFixed(2)}`,
+            `Background generation ${trainingGen} complete, best fitness = ${result.score.toFixed(2)}, overall best = ${bestScore.toFixed(2)}`,
         );
-    }, TRAINING_INTERVAL);
+    };
+    setInterval(trainStep, TRAINING_INTERVAL);
 }
 
 let canvas,
