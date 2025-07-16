@@ -136,12 +136,18 @@ function simulateShot(net, enemyX) {
     const t = (vy * 2) / GRAVITY;
     const landingX = vx * t;
     const dist = Math.abs(landingX - enemyX);
+    // distance from the firing tank's position at x=0
+    const selfDist = Math.abs(landingX);
     let damage = 0;
     if (dist <= w.radius) {
         damage = w.damage * (1 - dist / w.radius);
     }
+    let selfDamage = 0;
+    if (selfDist <= w.radius) {
+        selfDamage = w.damage * (1 - selfDist / w.radius);
+    }
     const closeness = Math.max(0, (w.radius - dist) / w.radius);
-    return damage + closeness * 10;
+    return damage + closeness * 10 - selfDamage;
 }
 
 function evaluate(net) {
@@ -616,6 +622,9 @@ if (typeof module !== 'undefined') {
         loadTrainedNet,
         evolve,
         startBackgroundTraining,
+        // expose for testing
+        evaluate,
+        simulateShot,
     };
 } else {
     window.onload = () => {
