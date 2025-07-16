@@ -291,9 +291,11 @@ function generateTerrain() {
     terrain = [];
     const segments = Math.floor(canvas.width / 10);
     const base = canvas.height - GROUND_HEIGHT;
+    const amplitude = 50 + Math.random() * 50; // vary hill height
+    const frequency = 0.3 + Math.random() * 0.4; // vary hill width
     for (let i = 0; i <= segments; i++) {
         const x = i * 10;
-        const y = base - Math.sin(i * 0.5) * 70 - Math.random() * 20;
+        const y = base - Math.sin(i * frequency) * amplitude - Math.random() * 20;
         terrain.push({ x, y });
     }
 }
