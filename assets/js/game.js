@@ -187,7 +187,9 @@ function startBackgroundTraining() {
         trainingPopulation = result.nextPop;
         trainedNet = cloneNet(result.best);
         trainingGen++;
-        console.log(`Background generation ${trainingGen} complete`);
+        console.log(
+            `Background generation ${trainingGen} complete, best fitness = ${result.score.toFixed(2)}`,
+        );
     }, 1000);
 }
 
