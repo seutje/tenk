@@ -284,7 +284,7 @@ function init(player = true) {
 
 function resize() {
     canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - 150;
+    canvas.height = window.innerHeight - 260;
 }
 
 function generateTerrain() {
