@@ -10,14 +10,14 @@ const WEAPONS = {
         name: "Standard Shell",
         damage: 25,
         radius: 30,
-        speed: 8,
+        speed: 12,
         description: "Standard explosive shell",
     },
     rapid: {
         name: "Rapid Fire",
         damage: 15,
         radius: 20,
-        speed: 12,
+        speed: 18,
         shots: 3,
         description: "Three small shells fired in succession",
     },
@@ -25,7 +25,7 @@ const WEAPONS = {
         name: "Triple Shot",
         damage: 20,
         radius: 25,
-        speed: 10,
+        speed: 15,
         spread: 0.3,
         shots: 3,
         description: "Three shells at different angles",
@@ -34,7 +34,7 @@ const WEAPONS = {
         name: "Bouncy Shell",
         damage: 20,
         radius: 25,
-        speed: 9,
+        speed: 13.5,
         bounces: 3,
         description: "Bounces off terrain before exploding",
     },
@@ -42,7 +42,7 @@ const WEAPONS = {
         name: "Mega Blast",
         damage: 50,
         radius: 60,
-        speed: 7,
+        speed: 10.5,
         description: "Devastating wide-radius explosion",
     },
 };
@@ -186,7 +186,7 @@ function makeAIDecision(id) {
     const dy = target.y - tank.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     let angle = (Math.atan2(-dy, dx) * 180) / Math.PI;
-    angle = Math.max(0, Math.min(90, angle));
+    angle = Math.max(0, Math.min(180, angle));
     const power = Math.min(
         1,
         Math.max(0.3, dist / 500 + (Math.random() - 0.5) * 0.2),
