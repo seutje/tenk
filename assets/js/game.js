@@ -5,7 +5,7 @@ const DEMO_TURN_TIME = 1;
 const GROUND_HEIGHT = 100;
 const TANK_WIDTH = 40;
 const TANK_HEIGHT = 20;
-const HIDDEN_WEIGHTS = 8;
+const HIDDEN_WEIGHTS = 11;
 
 const WEAPONS = {
     standard: {
