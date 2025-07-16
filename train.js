@@ -91,8 +91,10 @@ let terrainFreq = 0.02;
 let terrainAmp = 100;
 let trainingPool = Array.from({ length: 50 }, () => new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE));
 let globalBestModel = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+let globalBestFitness = -Infinity;
 
 function simulateTraining() {
+  let generationBest = -Infinity;
   for (let sim = 0; sim < TRAINING_ITERATIONS; sim++) {
     const simTanks = [
       new Tank(100, 300, 1),
@@ -127,23 +129,31 @@ function simulateTraining() {
     }
 
     simTanks.sort((a, b) => b.fitness - a.fitness);
-    trainingPool[Math.floor(Math.random() * trainingPool.length)].copyFrom(simTanks[0].brain);
+    const bestTank = simTanks[0];
+    if (bestTank.fitness > generationBest) generationBest = bestTank.fitness;
+    if (bestTank.fitness > globalBestFitness) {
+      globalBestFitness = bestTank.fitness;
+      globalBestModel.copyFrom(bestTank.brain);
+    }
+    trainingPool[Math.floor(Math.random() * trainingPool.length)].copyFrom(bestTank.brain);
   }
-
-  globalBestModel.copyFrom(
-    trainingPool.reduce((best, cur) => (Math.random() > 0.5 ? cur : best))
-  );
+  return generationBest;
 }
 
 function train(generations) {
   for (let g = 0; g < generations; g++) {
-    simulateTraining();
+    const genBest = simulateTraining();
     trainingPool.forEach(net => net.mutate());
-    process.stdout.write(`Generation ${g + 1}/${generations}\r`);
+    console.log(
+      `Generation ${g + 1}/${generations} - best: ${genBest.toFixed(2)} global best: ${globalBestFitness.toFixed(2)}`
+    );
   }
-  fs.writeFileSync('trained_net.json', JSON.stringify(globalBestModel.toJSON(), null, 2));
-  console.log(`\nSaved weights to trained_net.json`);
+  fs.writeFileSync(
+    'trained_net.json',
+    JSON.stringify(globalBestModel.toJSON(), null, 2)
+  );
+  console.log('Saved weights to trained_net.json');
 }
 
-const gens = parseInt(process.argv[2], 10) || 20;
+const gens = parseInt(process.argv[2], 10) || 500;
 train(gens);
