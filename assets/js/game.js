@@ -529,9 +529,36 @@ function initGame() {
     particles = [];
     
     const colors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44'];
+    const minDistance = 100;
+    const maxAttempts = 100;
+
     for (let i = 0; i < 4; i++) {
-        const x = (i + 1) * canvas.width / 5 - TANK_WIDTH/2;
-        const y = terrain[Math.floor((i + 1) * TERRAIN_POINTS / 5)].y;
+        let x, y;
+        let placed = false;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            x = Math.random() * (canvas.width - TANK_WIDTH);
+            y = getTerrainY(x + TANK_WIDTH / 2);
+
+            let tooClose = false;
+            for (const existingTank of tanks) {
+                if (Math.abs(x - existingTank.x) < minDistance) {
+                    tooClose = true;
+                    break;
+                }
+            }
+
+            if (!tooClose) {
+                placed = true;
+                break;
+            }
+        }
+
+        if (!placed) {
+            // Fallback to default positioning if random placement fails after maxAttempts
+            x = (i + 1) * canvas.width / 5 - TANK_WIDTH / 2;
+            y = getTerrainY(x + TANK_WIDTH / 2);
+        }
+        
         tanks.push(new Tank(x, y, colors[i], i + 1));
         tanks[i].updateBrain();
     }
