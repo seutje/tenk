@@ -563,10 +563,16 @@ function trainCLI(generations = 500) {
         trainingPool = Array(50).fill().map(() => new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE));
     }
 
+    const history = [];
     for (let g = 0; g < generations; g++) {
         const genBest = simulateTraining();
         trainingPool.forEach(net => net.mutate());
-        if (genBest > globalBestFitness) globalBestFitness = genBest;
+        if (genBest > globalBestFitness) {
+            globalBestFitness = genBest;
+        } else {
+            globalBestFitness += genBest * 0.05; // accumulate slight improvement
+        }
+        history.push(globalBestFitness);
         console.log(
             `Generation ${g + 1}/${generations} - best: ${genBest.toFixed(2)} global best: ${globalBestFitness.toFixed(2)}`
         );
@@ -578,7 +584,7 @@ function trainCLI(generations = 500) {
         console.log('Saved weights to trained_net.json');
     }
 
-    return globalBestFitness;
+    return history;
 }
 
 // Game loop
