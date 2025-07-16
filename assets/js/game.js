@@ -379,7 +379,7 @@ function draw() {
             ctx.fillStyle = "#000";
             ctx.font = "12px 'Courier New', monospace";
             ctx.textAlign = "center";
-            ctx.fillText(t.name, t.x, t.y - t.height - 12);
+            ctx.fillText(t.name, t.x, t.y - t.height + 12);
         }
     });
     ctx.fillStyle = "#00ff00";
