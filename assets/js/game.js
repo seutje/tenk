@@ -248,20 +248,33 @@ let canvas,
     timer,
     turnInProgress,
     gameOver,
-    aiDecisions;
+    aiDecisions,
+    hasPlayer = true,
+    loopStarted = false,
+    eventsBound = false;
 
-function init() {
+function init(player = true) {
     canvas = document.getElementById("gameCanvas");
     ctx = canvas.getContext("2d");
+    hasPlayer = player;
     projectiles = [];
     explosions = [];
     gameOver = false;
     resize();
     generateTerrain();
-    createTanks();
+    createTanks(player);
     updateUI();
-    bindUI();
-    gameLoop();
+    if (!eventsBound) {
+        bindUI();
+        eventsBound = true;
+    }
+    document.getElementById("controls").style.display = hasPlayer
+        ? "block"
+        : "none";
+    if (!loopStarted) {
+        gameLoop();
+        loopStarted = true;
+    }
     startTurn();
 }
 
@@ -281,14 +294,15 @@ function generateTerrain() {
     }
 }
 
-function createTanks() {
+function createTanks(player = true) {
     tanks = [];
     const positions = [0.15, 0.35, 0.65, 0.85];
     const colors = ["#00ff00", "#00aa00", "#008800", "#006600"];
     for (let i = 0; i < 4; i++) {
+        const isPlayer = player && i === 0;
         tanks.push({
             id: i,
-            name: i ? `AI-${i}` : "Player",
+            name: isPlayer ? "Player" : `AI-${player ? i : i + 1}`,
             x: canvas.width * positions[i],
             y: 0,
             width: TANK_WIDTH,
@@ -297,9 +311,9 @@ function createTanks() {
             maxHealth: 100,
             alive: true,
             color: colors[i],
-            ai: !!i,
+            ai: !isPlayer,
             sensors: { front: 0, back: 0, enemy: 0 },
-            aiNet: i
+            aiNet: !isPlayer
                 ? trainedNet
                     ? JSON.parse(JSON.stringify(trainedNet))
                     : createRandomNet()
@@ -357,14 +371,15 @@ function startTurn() {
             (timer / TURN_TIME) * 100 + "%";
         if (timer <= 0) {
             clearInterval(interval);
-            tanks[0].alive ? playerFire() : processAITurn();
+            hasPlayer && tanks[0].alive ? playerFire() : processAITurn();
         }
     }, 100);
-    tanks.slice(1).forEach((t, i) => t.alive && makeAIDecision(i + 1));
+    const startIdx = hasPlayer ? 1 : 0;
+    tanks.slice(startIdx).forEach((t, i) => t.alive && makeAIDecision(startIdx + i));
 }
 
 function playerFire() {
-    if (turnInProgress || !tanks[0].alive) return;
+    if (!hasPlayer || turnInProgress || !tanks[0].alive) return;
     const w = document.getElementById("weaponSelect").value;
     const a = +document.getElementById("angleSlider").value;
     const p = +document.getElementById("powerSlider").value / 100;
@@ -558,6 +573,12 @@ function showMessage(msg) {
     setTimeout(() => (box.style.display = "none"), 3000);
 }
 
+function startGame() {
+    const screen = document.getElementById("startScreen");
+    if (screen) screen.style.display = "none";
+    init(true);
+}
+
 function updateUI() {
     tanks.forEach((t) => {
         const prefix = t.id === 0 ? "player" : `ai${t.id}`;
@@ -629,8 +650,10 @@ if (typeof module !== 'undefined') {
 } else {
     window.onload = () => {
         loadTrainedNet().then(() => {
-            init();
+            init(false);
             startBackgroundTraining();
+            const btn = document.getElementById("startButton");
+            if (btn) btn.addEventListener("click", startGame);
         });
     };
 }
