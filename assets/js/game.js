@@ -99,6 +99,7 @@ function neuralDecision(net, inputs) {
 const POPULATION = 20;
 const MUTATION_RATE = 0.1;
 const MUTATION_STRENGTH = 0.5;
+const TRAINING_INTERVAL = 250; // faster background evolution
 
 function cloneNet(net) {
     return JSON.parse(JSON.stringify(net));
@@ -187,10 +188,15 @@ function startBackgroundTraining() {
         trainingPopulation = result.nextPop;
         trainedNet = cloneNet(result.best);
         trainingGen++;
+        if (tanks) {
+            tanks.forEach((t) => {
+                if (t.ai) t.aiNet = cloneNet(trainedNet);
+            });
+        }
         console.log(
             `Background generation ${trainingGen} complete, best fitness = ${result.score.toFixed(2)}`,
         );
-    }, 1000);
+    }, TRAINING_INTERVAL);
 }
 
 let canvas,
