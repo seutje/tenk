@@ -50,9 +50,9 @@ const WEAPONS = {
 // Simple neural network weights for AI decision making
 const AI_NET = {
     hiddenWeights: [
-        [0.4, -0.3],
-        [-0.2, 0.6],
-        [0.1, 0.2],
+        [0.4, -0.3, 0.1, -0.1],
+        [-0.2, 0.6, 0.05, 0.05],
+        [0.1, 0.2, -0.1, 0.1],
     ],
     hiddenBias: [0.1, -0.1, 0.05],
     outputWeights: [
@@ -67,10 +67,11 @@ const AI_NET = {
     outputBias: [0, 0, 0, 0, 0, 0, 0],
 };
 
-function neuralDecision(dx, dy) {
-    const inputs = [dx / canvas.width, dy / canvas.height];
+function neuralDecision(inputs) {
     const hidden = AI_NET.hiddenWeights.map((w, i) =>
-        Math.tanh(w[0] * inputs[0] + w[1] * inputs[1] + AI_NET.hiddenBias[i]),
+        Math.tanh(
+            w.reduce((s, wt, j) => s + wt * inputs[j], AI_NET.hiddenBias[i]),
+        ),
     );
     const out = AI_NET.outputWeights.map((w, i) =>
         w.reduce((s, wt, j) => s + wt * hidden[j], AI_NET.outputBias[i]),
@@ -141,6 +142,7 @@ function createTanks() {
             alive: true,
             color: colors[i],
             ai: !!i,
+            sensors: { front: 0, back: 0 },
         });
     }
     placeTanks();
@@ -212,6 +214,7 @@ function playerFire() {
 function makeAIDecision(id) {
     const tank = tanks[id];
     if (!tank.alive) return;
+    updateSensors(tank);
     const targets = tanks.filter((t) => t.id !== id && t.alive);
     if (!targets.length) return;
     const target = targets.reduce((a, b) =>
@@ -219,7 +222,13 @@ function makeAIDecision(id) {
     );
     const dx = target.x - tank.x;
     const dy = target.y - tank.y;
-    const { angle, power, weapon } = neuralDecision(dx, dy);
+    const inputs = [
+        dx / canvas.width,
+        dy / canvas.height,
+        tank.sensors.front,
+        tank.sensors.back,
+    ];
+    const { angle, power, weapon } = neuralDecision(inputs);
     aiDecisions.push({ tank, weapon, angle, power });
 }
 
@@ -285,6 +294,14 @@ function getTerrainHeight(x) {
         }
     }
     return canvas.height - GROUND_HEIGHT;
+}
+
+function updateSensors(tank) {
+    const base = getTerrainHeight(tank.x);
+    const front = getTerrainHeight(tank.x + 20);
+    const back = getTerrainHeight(tank.x - 20);
+    tank.sensors.front = (front - base) / 50;
+    tank.sensors.back = (back - base) / 50;
 }
 
 function updateProjectiles() {
