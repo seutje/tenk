@@ -36,6 +36,27 @@ let globalBestModel = null;
 let trainingPool = [];
 const TRAINING_ITERATIONS = 500; // increased from 10 for faster background training
 
+function loadTrainedNet() {
+    if (typeof fetch === 'function') {
+        fetch('trained_net.json')
+            .then(res => (res.ok ? res.json() : null))
+            .then(data => {
+                if (data) globalBestModel = NeuralNetwork.fromJSON(data);
+            })
+            .catch(() => {});
+    } else if (typeof require !== 'undefined') {
+        try {
+            const fs = require('fs');
+            if (fs.existsSync('trained_net.json')) {
+                const data = JSON.parse(fs.readFileSync('trained_net.json', 'utf8'));
+                globalBestModel = NeuralNetwork.fromJSON(data);
+            }
+        } catch (e) {}
+    }
+}
+
+loadTrainedNet();
+
 // Initialize terrain
 function generateTerrain() {
     terrain = [];
@@ -103,6 +124,24 @@ class NeuralNetwork {
         this.bias1 = JSON.parse(JSON.stringify(other.bias1));
         this.weights2 = JSON.parse(JSON.stringify(other.weights2));
         this.bias2 = JSON.parse(JSON.stringify(other.bias2));
+    }
+
+    toJSON() {
+        return {
+            weights1: this.weights1,
+            bias1: this.bias1,
+            weights2: this.weights2,
+            bias2: this.bias2
+        };
+    }
+
+    static fromJSON(data) {
+        const nn = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+        nn.weights1 = data.weights1;
+        nn.bias1 = data.bias1;
+        nn.weights2 = data.weights2;
+        nn.bias2 = data.bias2;
+        return nn;
     }
 }
 
