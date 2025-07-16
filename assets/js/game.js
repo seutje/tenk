@@ -1,5 +1,13 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+let canvas;
+let ctx;
+
+if (typeof document !== 'undefined') {
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d');
+} else {
+    canvas = { width: 1000, height: 600 };
+    ctx = {};
+}
 
 // Game state
 let gameSpeed = 1;
@@ -480,9 +488,10 @@ function initGame() {
 function simulateTraining() {
     if (!globalBestModel) {
         globalBestModel = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-        return;
     }
-    
+
+    let generationBest = -Infinity;
+
     // Run simulation battles for training
     for (let sim = 0; sim < TRAINING_ITERATIONS; sim++) {
         let simTanks = [
@@ -528,13 +537,42 @@ function simulateTraining() {
         // Update training pool with best performers
         simTanks.sort((a, b) => b.fitness - a.fitness);
         trainingPool[Math.floor(Math.random() * trainingPool.length)].copyFrom(simTanks[0].brain);
+        if (simTanks[0].fitness > generationBest) generationBest = simTanks[0].fitness;
     }
-    
+
     // Update global best model
     globalBestModel.copyFrom(trainingPool.reduce((best, current) => {
         // Simple fitness evaluation for training pool
         return Math.random() > 0.5 ? current : best;
     }));
+
+    return generationBest;
+}
+
+function trainCLI(generations = 500) {
+    if (!globalBestModel) {
+        globalBestModel = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+    }
+
+    if (trainingPool.length === 0) {
+        trainingPool = Array(50).fill().map(() => new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE));
+    }
+
+    let globalBestFitness = -Infinity;
+    for (let g = 0; g < generations; g++) {
+        const genBest = simulateTraining();
+        trainingPool.forEach(net => net.mutate());
+        if (genBest > globalBestFitness) globalBestFitness = genBest;
+        console.log(
+            `Generation ${g + 1}/${generations} - best: ${genBest.toFixed(2)} global best: ${globalBestFitness.toFixed(2)}`
+        );
+    }
+
+    if (typeof require !== 'undefined') {
+        const fs = require('fs');
+        fs.writeFileSync('trained_net.json', JSON.stringify(globalBestModel.toJSON(), null, 2));
+        console.log('Saved weights to trained_net.json');
+    }
 }
 
 // Game loop
@@ -658,6 +696,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         generateTerrain,
         getTerrainY,
-        initGame
+        initGame,
+        trainCLI
     };
 }
