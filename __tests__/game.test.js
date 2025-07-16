@@ -21,6 +21,10 @@ test('simulateShot penalizes self hits', () => {
     outputWeights: Array.from({ length: 7 }, () => Array(HIDDEN_WEIGHTS).fill(0)),
     outputBias: [1, -1, 0, 0, 0, 0, 0],
   };
-  const score = simulateShot(net, 300);
+  const score = simulateShot(net, [
+    { x: 300, y: 0, alive: 1 },
+    { x: 0, y: 0, alive: 0 },
+    { x: 0, y: 0, alive: 0 },
+  ]);
   expect(score).toBeLessThan(0);
 });
