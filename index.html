@@ -213,6 +213,7 @@
     resize();
     generateTerrain();
     createTanks();
+    updateUI();
     bindUI();
     gameLoop();
     startTurn();
@@ -432,12 +433,25 @@
     }
     }
 
-    function showMessage(msg) {
+function showMessage(msg) {
     const box = document.getElementById("messageBox");
     box.textContent = msg;
     box.style.display = "block";
     setTimeout(() => box.style.display = "none", 3000);
-    }
+}
+
+function updateUI() {
+    tanks.forEach(t => {
+        const prefix = t.id === 0 ? 'player' : `ai${t.id}`;
+        const stat = document.getElementById(`${prefix}-stat`);
+        const healthSpan = document.getElementById(`${prefix}-health`);
+        if (!stat || !healthSpan) return;
+        healthSpan.textContent = t.health;
+        const fill = stat.querySelector('.health-fill');
+        if (fill) fill.style.width = `${(t.health / t.maxHealth) * 100}%`;
+        stat.classList.toggle('dead', !t.alive);
+    });
+}
 
     function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
