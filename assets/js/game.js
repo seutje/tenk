@@ -48,6 +48,67 @@ const WEAPONS = {
     },
 };
 
+class NeuralNetwork {
+    constructor({ hiddenWeights, hiddenBias, outputWeights, outputBias } = {}) {
+        this.hiddenWeights = hiddenWeights || Array.from({ length: 3 }, () => Array(5).fill(0));
+        this.hiddenBias = hiddenBias || Array(3).fill(0);
+        this.outputWeights = outputWeights || Array.from({ length: 7 }, () => Array(3).fill(0));
+        this.outputBias = outputBias || Array(7).fill(0);
+    }
+
+    static random() {
+        const rand = () => Math.random() * 2 - 1;
+        return new NeuralNetwork({
+            hiddenWeights: Array.from({ length: 3 }, () => Array.from({ length: 5 }, rand)),
+            hiddenBias: Array.from({ length: 3 }, () => rand() / 2),
+            outputWeights: Array.from({ length: 7 }, () => Array.from({ length: 3 }, rand)),
+            outputBias: Array.from({ length: 7 }, () => rand() / 2),
+        });
+    }
+
+    static from(obj) {
+        return new NeuralNetwork(obj);
+    }
+
+    clone() {
+        return NeuralNetwork.from(JSON.parse(JSON.stringify(this)));
+    }
+
+    mutate(rate = MUTATION_RATE, strength = MUTATION_STRENGTH) {
+        const mutateVal = (v) => (Math.random() < rate ? v + (Math.random() * 2 - 1) * strength : v);
+        const mutateArr = (a) => a.map((v) => (Array.isArray(v) ? mutateArr(v) : mutateVal(v)));
+        this.hiddenWeights = mutateArr(this.hiddenWeights);
+        this.hiddenBias = mutateArr(this.hiddenBias);
+        this.outputWeights = mutateArr(this.outputWeights);
+        this.outputBias = mutateArr(this.outputBias);
+    }
+
+    forward(inputs) {
+        const hidden = this.hiddenWeights.map((w, i) =>
+            Math.tanh(w.reduce((s, wt, j) => s + wt * inputs[j], this.hiddenBias[i]))
+        );
+        return this.outputWeights.map((w, i) => w.reduce((s, wt, j) => s + wt * hidden[j], this.outputBias[i]));
+    }
+
+    decide(inputs) {
+        const out = this.forward(inputs);
+        const angle = Math.max(0, Math.min(180, (out[0] + 1) * 90));
+        const power = Math.max(0.3, Math.min(1, (out[1] + 1) / 2));
+        const weaponIndex = out.slice(2).indexOf(Math.max(...out.slice(2)));
+        const weapon = Object.keys(WEAPONS)[weaponIndex];
+        return { angle, power, weapon };
+    }
+
+    toJSON() {
+        return {
+            hiddenWeights: this.hiddenWeights,
+            hiddenBias: this.hiddenBias,
+            outputWeights: this.outputWeights,
+            outputBias: this.outputBias,
+        };
+    }
+}
+
 let trainedNet = null;
 let bestNet = null;
 let bestScore = -Infinity;
@@ -55,8 +116,9 @@ let bestScore = -Infinity;
 function loadTrainedNet() {
     if (typeof window === 'undefined') {
         try {
-            trainedNet = require('../trained_net.json');
-            bestNet = cloneNet(trainedNet);
+            const obj = require('../trained_net.json');
+            trainedNet = NeuralNetwork.from(obj);
+            bestNet = trainedNet.clone();
             bestScore = evaluate(trainedNet);
         } catch (e) {
             trainedNet = null;
@@ -66,8 +128,8 @@ function loadTrainedNet() {
         return fetch('trained_net.json')
             .then((r) => r.json())
             .then((j) => {
-                trainedNet = j;
-                bestNet = cloneNet(trainedNet);
+                trainedNet = NeuralNetwork.from(j);
+                bestNet = trainedNet.clone();
                 bestScore = evaluate(trainedNet);
             })
             .catch(() => {});
@@ -76,30 +138,12 @@ function loadTrainedNet() {
 
 // Generate a random neural network for an AI tank
 function createRandomNet() {
-    const rand = () => Math.random() * 2 - 1; // range [-1, 1]
-    const hiddenWeights = Array.from({ length: 3 }, () =>
-        Array.from({ length: 5 }, rand),
-    );
-    const hiddenBias = Array.from({ length: 3 }, () => rand() / 2);
-    const outputWeights = Array.from({ length: 7 }, () =>
-        Array.from({ length: 3 }, rand),
-    );
-    const outputBias = Array.from({ length: 7 }, () => rand() / 2);
-    return { hiddenWeights, hiddenBias, outputWeights, outputBias };
+    return NeuralNetwork.random();
 }
 
 function neuralDecision(net, inputs) {
-    const hidden = net.hiddenWeights.map((w, i) =>
-        Math.tanh(w.reduce((s, wt, j) => s + wt * inputs[j], net.hiddenBias[i])),
-    );
-    const out = net.outputWeights.map((w, i) =>
-        w.reduce((s, wt, j) => s + wt * hidden[j], net.outputBias[i]),
-    );
-    const angle = Math.max(0, Math.min(180, (out[0] + 1) * 90));
-    const power = Math.max(0.3, Math.min(1, (out[1] + 1) / 2));
-    const weaponIndex = out.slice(2).indexOf(Math.max(...out.slice(2)));
-    const weapon = Object.keys(WEAPONS)[weaponIndex];
-    return { angle, power, weapon };
+    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
+    return nn.decide(inputs);
 }
 
 // ==== Training Functions ====
@@ -109,26 +153,19 @@ const MUTATION_STRENGTH = 0.5;
 const TRAINING_INTERVAL = 250; // faster background evolution
 
 function cloneNet(net) {
-    return JSON.parse(JSON.stringify(net));
+    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
+    return nn.clone();
 }
 
 function mutate(net) {
-    const mutateArray = (arr) => {
-        for (let i = 0; i < arr.length; i++) {
-            if (Array.isArray(arr[i])) mutateArray(arr[i]);
-            else if (Math.random() < MUTATION_RATE)
-                arr[i] += (Math.random() * 2 - 1) * MUTATION_STRENGTH;
-        }
-    };
-    mutateArray(net.hiddenWeights);
-    mutateArray(net.hiddenBias);
-    mutateArray(net.outputWeights);
-    mutateArray(net.outputBias);
+    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
+    nn.mutate();
 }
 
 function simulateShot(net, enemyX) {
+    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
     const inputs = [enemyX / 800, 0, 0, 0, Math.abs(enemyX) / 800];
-    const { angle, power, weapon } = neuralDecision(net, inputs);
+    const { angle, power, weapon } = nn.decide(inputs);
     const rad = (angle * Math.PI) / 180;
     const w = WEAPONS[weapon];
     const speed = w.speed * power;
@@ -152,10 +189,11 @@ function simulateShot(net, enemyX) {
 }
 
 function evaluate(net) {
+    const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
     let fitness = 0;
     for (let i = 0; i < 5; i++) {
         const enemyX = 300 + Math.random() * 200;
-        fitness += simulateShot(net, enemyX);
+        fitness += simulateShot(nn, enemyX);
     }
     return fitness / 5;
 }
@@ -320,7 +358,7 @@ function createTanks(player = true) {
             sensors: { front: 0, back: 0, enemy: 0 },
             aiNet: !isPlayer
                 ? trainedNet
-                    ? JSON.parse(JSON.stringify(trainedNet))
+                    ? trainedNet.clone()
                     : createRandomNet()
                 : null,
         });
@@ -654,6 +692,7 @@ if (typeof module !== 'undefined') {
         // expose for testing
         evaluate,
         simulateShot,
+        NeuralNetwork,
     };
 } else {
     window.onload = () => {
