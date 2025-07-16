@@ -6,12 +6,14 @@ const GROUND_HEIGHT = 100;
 const TANK_WIDTH = 40;
 const TANK_HEIGHT = 20;
 const ENEMY_COUNT = 3;
-const INPUT_SIZE = 2 + 4 + ENEMY_COUNT * 3;
+const INPUT_SIZE = 2 + 5 + ENEMY_COUNT * 3; // additional wind sensor
 const HIDDEN_WEIGHTS = INPUT_SIZE + 5;
 const DEFAULT_TERRAIN_AMPLITUDE = 70;
 const DEFAULT_TERRAIN_FREQUENCY = 0.5;
 let currentAmplitude = DEFAULT_TERRAIN_AMPLITUDE;
 let currentFrequency = DEFAULT_TERRAIN_FREQUENCY;
+const WIND_MAX = 0.05;
+let currentWind = 0;
 
 const WEAPONS = {
     standard: {
@@ -200,7 +202,7 @@ function getTrainingTerrainHeight(terrain, x, width = 800) {
     return terrain[terrain.length - 1].y;
 }
 
-function simulateShot(net, enemies, terrain = generateTrainingTerrain()) {
+function simulateShot(net, enemies, terrain = generateTrainingTerrain(), wind = 0) {
     const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
     const amp = terrain.amplitude || DEFAULT_TERRAIN_AMPLITUDE;
     const freq = terrain.frequency || DEFAULT_TERRAIN_FREQUENCY;
@@ -231,6 +233,7 @@ function simulateShot(net, enemies, terrain = generateTrainingTerrain()) {
         freq,
         selfX / width,
         selfY / height,
+        wind,
         ...normalizedEnemies.flatMap((e) => [e.x, e.y, e.alive]),
     ];
     const { angle, power, weapon } = nn.decide(inputs);
@@ -245,6 +248,7 @@ function simulateShot(net, enemies, terrain = generateTrainingTerrain()) {
 
     while (x >= 0 && x <= width && y <= height) {
         vy += GRAVITY;
+        vx += wind;
         x += vx;
         y += vy;
         const ground = getTrainingTerrainHeight(terrain, x, width);
@@ -284,7 +288,8 @@ function evaluate(net) {
             const y = getTrainingTerrainHeight(terrain, x, 800);
             return { x, y, alive: 1 };
         });
-        fitness += simulateShot(nn, enemies, terrain);
+        const wind = (Math.random() * 2 - 1) * WIND_MAX;
+        fitness += simulateShot(nn, enemies, terrain, wind);
     }
     return fitness / 5;
 }
@@ -455,6 +460,7 @@ function createTanks(player = true) {
                 frequency: 0,
                 selfX: 0,
                 selfY: 0,
+                wind: 0,
                 enemies: Array.from({ length: ENEMY_COUNT }, () => ({
                     x: 0,
                     y: 0,
@@ -510,6 +516,7 @@ function bindUI() {
 
 function startTurn() {
     if (gameOver) return;
+    currentWind = (Math.random() * 2 - 1) * WIND_MAX;
     const turnTime = hasPlayer ? TURN_TIME : DEMO_TURN_TIME;
     timer = turnTime;
     turnInProgress = false;
@@ -555,6 +562,7 @@ function makeAIDecision(id) {
         tank.sensors.frequency,
         tank.sensors.selfX,
         tank.sensors.selfY,
+        tank.sensors.wind,
         ...enemyInputs,
     ];
     const { angle, power, weapon } = neuralDecision(tank.aiNet, inputs);
@@ -630,6 +638,7 @@ function updateSensors(tank) {
     tank.sensors.frequency = currentFrequency;
     tank.sensors.selfX = tank.x / canvas.width;
     tank.sensors.selfY = tank.y / canvas.height;
+    tank.sensors.wind = currentWind;
     const others = tanks.filter((t) => t.id !== tank.id).sort((a, b) => a.id - b.id);
     for (let i = 0; i < ENEMY_COUNT; i++) {
         const enemy = others[i];
@@ -649,6 +658,7 @@ function updateProjectiles() {
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
         p.vy += GRAVITY;
+        p.vx += currentWind;
         p.x += p.vx;
         p.y += p.vy;
         if (p.y >= getTerrainHeight(p.x)) {
