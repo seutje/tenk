@@ -207,6 +207,9 @@
     function init() {
     canvas = document.getElementById("gameCanvas");
     ctx = canvas.getContext("2d");
+    projectiles = [];
+    explosions = [];
+    gameOver = false;
     resize();
     generateTerrain();
     createTanks();
