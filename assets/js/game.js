@@ -617,6 +617,7 @@ if (
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         generateTerrain,
-        getTerrainY
+        getTerrainY,
+        initGame
     };
 }
