@@ -338,33 +338,54 @@ class Projectile {
     
     update() {
         if (!this.active) return;
-        
-        this.x += this.vx;
-        this.y += this.vy;
+
+        const prevX = this.x;
+        const prevY = this.y;
+
         this.vy += GRAVITY;
-        
-        // Check terrain collision
-        const terrainY = getTerrainY(this.x);
-        if (this.y >= terrainY) {
-            this.explode();
-            this.destroyTerrain(this.x, terrainY);
+        const nextX = this.x + this.vx;
+        const nextY = this.y + this.vy;
+
+        const steps = Math.max(1, Math.ceil(Math.max(Math.abs(nextX - prevX), Math.abs(nextY - prevY))));
+
+        for (let i = 1; i <= steps && this.active; i++) {
+            const t = i / steps;
+            const stepX = prevX + (nextX - prevX) * t;
+            const stepY = prevY + (nextY - prevY) * t;
+
+            const terrainY = getTerrainY(stepX);
+            if (stepY >= terrainY) {
+                this.x = stepX;
+                this.y = stepY;
+                this.explode();
+                this.destroyTerrain(stepX, terrainY);
+                this.active = false;
+                break;
+            }
+
+            for (const tank of tanks) {
+                if (tank.alive &&
+                    stepX >= tank.x && stepX <= tank.x + TANK_WIDTH &&
+                    stepY >= tank.y - TANK_HEIGHT && stepY <= tank.y) {
+                    tank.takeDamage(this.damage, this.ownerId);
+                    this.x = stepX;
+                    this.y = stepY;
+                    this.explode();
+                    this.active = false;
+                    break;
+                }
+            }
         }
-        
+
+        if (!this.active) return;
+
+        this.x = nextX;
+        this.y = nextY;
+
         // Check bounds
         if (this.x < 0 || this.x > canvas.width || this.y > canvas.height) {
             this.active = false;
         }
-        
-        // Check tank collision
-        tanks.forEach(tank => {
-            if (tank.alive && this.active &&
-                this.x >= tank.x && this.x <= tank.x + TANK_WIDTH &&
-                this.y >= tank.y - TANK_HEIGHT && this.y <= tank.y) {
-                tank.takeDamage(this.damage, this.ownerId);
-                this.explode();
-                this.active = false;
-            }
-        });
     }
     
     destroyTerrain(x, y) {
