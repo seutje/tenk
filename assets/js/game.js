@@ -605,7 +605,10 @@ function toggleSpeed() {
 }
 
 // Start game in browser environment
-if (typeof window !== 'undefined' && !process.env.JEST_WORKER_ID) {
+if (
+    typeof window !== 'undefined' &&
+    !(typeof process !== 'undefined' && process.env && process.env.JEST_WORKER_ID)
+) {
     initGame();
     gameLoop();
 }
