@@ -75,14 +75,14 @@ function generateTerrain() {
 
     for (let i = 0; i <= TERRAIN_POINTS; i++) {
         const x = (i / TERRAIN_POINTS) * canvas.width;
-        const y = canvas.height - 50 - Math.sin(x * terrainFreq) * terrainAmp;
+        const y = canvas.height - 60 - Math.sin(x * terrainFreq) * terrainAmp;
         terrain.push({x, y});
     }
 
-    // Raise terrain if any points fall below the bottom of the canvas
+    // Raise terrain if any points fall below 5px from the bottom of the canvas
     const maxY = Math.max(...terrain.map(p => p.y));
-    if (maxY > canvas.height) {
-        const shift = maxY - canvas.height;
+    if (maxY > canvas.height - 5) {
+        const shift = maxY - (canvas.height - 5);
         for (const point of terrain) {
             point.y -= shift;
         }
@@ -407,7 +407,8 @@ class Projectile {
             );
             
             if (distance < destroyRadius) {
-                terrain[i].y += destroyRadius - distance;
+                const newY = terrain[i].y + (destroyRadius - distance);
+                terrain[i].y = Math.min(newY, canvas.height - 5);
             }
         }
         
