@@ -123,7 +123,7 @@ function simulateTraining() {
         const target = simTanks.find(t => t.id !== tank.id && t.alive);
         if (target) {
           const distance = Math.hypot(target.x - tank.x, target.y - tank.y);
-          tank.fitness += Math.max(0, 100 - distance);
+          tank.fitness += Math.max(0, 1000 - distance);
         }
       });
     }
@@ -153,7 +153,16 @@ function train(generations) {
     JSON.stringify(globalBestModel.toJSON(), null, 2)
   );
   console.log('Saved weights to trained_net.json');
+  return globalBestFitness;
 }
 
-const gens = parseInt(process.argv[2], 10) || 500;
-train(gens);
+if (require.main === module) {
+  const gens = parseInt(process.argv[2], 10) || 500;
+  train(gens);
+}
+
+module.exports = {
+  train,
+  simulateTraining,
+  getGlobalBestFitness: () => globalBestFitness
+};
