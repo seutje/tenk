@@ -20,7 +20,7 @@ const INPUT_SIZE = 13;
 const HIDDEN_SIZE = 20;
 const OUTPUT_SIZE = 3;
 const LEARNING_RATE = 0.1;
-const MUTATION_RATE = 0.1;
+const MUTATION_RATE = 0.3;
 
 // Terrain parameters
 let terrainFreq = 0.02;
@@ -530,7 +530,7 @@ function simulateTraining() {
                             Math.pow(target.x - tank.x, 2) + 
                             Math.pow(target.y - tank.y, 2)
                         );
-                        tank.fitness += Math.max(0, 100 - distance);
+                        tank.fitness += Math.max(0, 800 - distance);
                     }
                 }
             });
@@ -577,6 +577,8 @@ function trainCLI(generations = 500) {
         fs.writeFileSync('trained_net.json', JSON.stringify(globalBestModel.toJSON(), null, 2));
         console.log('Saved weights to trained_net.json');
     }
+
+    return globalBestFitness;
 }
 
 // Game loop
