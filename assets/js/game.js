@@ -48,11 +48,15 @@ const WEAPONS = {
 };
 
 let trainedNet = null;
+let bestNet = null;
+let bestScore = -Infinity;
 
 function loadTrainedNet() {
     if (typeof window === 'undefined') {
         try {
             trainedNet = require('../trained_net.json');
+            bestNet = cloneNet(trainedNet);
+            bestScore = evaluate(trainedNet);
         } catch (e) {
             trainedNet = null;
         }
@@ -62,6 +66,8 @@ function loadTrainedNet() {
             .then((r) => r.json())
             .then((j) => {
                 trainedNet = j;
+                bestNet = cloneNet(trainedNet);
+                bestScore = evaluate(trainedNet);
             })
             .catch(() => {});
     }
@@ -93,6 +99,138 @@ function neuralDecision(net, inputs) {
     const weaponIndex = out.slice(2).indexOf(Math.max(...out.slice(2)));
     const weapon = Object.keys(WEAPONS)[weaponIndex];
     return { angle, power, weapon };
+}
+
+// ==== Training Functions ====
+const POPULATION = 20;
+const MUTATION_RATE = 0.1;
+const MUTATION_STRENGTH = 0.5;
+const TRAINING_INTERVAL = 250; // faster background evolution
+
+function cloneNet(net) {
+    return JSON.parse(JSON.stringify(net));
+}
+
+function mutate(net) {
+    const mutateArray = (arr) => {
+        for (let i = 0; i < arr.length; i++) {
+            if (Array.isArray(arr[i])) mutateArray(arr[i]);
+            else if (Math.random() < MUTATION_RATE)
+                arr[i] += (Math.random() * 2 - 1) * MUTATION_STRENGTH;
+        }
+    };
+    mutateArray(net.hiddenWeights);
+    mutateArray(net.hiddenBias);
+    mutateArray(net.outputWeights);
+    mutateArray(net.outputBias);
+}
+
+function simulateShot(net, enemyX) {
+    const inputs = [enemyX / 800, 0, 0, 0, Math.abs(enemyX) / 800];
+    const { angle, power, weapon } = neuralDecision(net, inputs);
+    const rad = (angle * Math.PI) / 180;
+    const w = WEAPONS[weapon];
+    const speed = w.speed * power;
+    const vx = Math.cos(rad) * speed;
+    const vy = Math.sin(rad) * speed;
+    const t = (vy * 2) / GRAVITY;
+    const landingX = vx * t;
+    const dist = Math.abs(landingX - enemyX);
+    let damage = 0;
+    if (dist <= w.radius) {
+        damage = w.damage * (1 - dist / w.radius);
+    }
+    const closeness = Math.max(0, (w.radius - dist) / w.radius);
+    return damage + closeness * 10;
+}
+
+function evaluate(net) {
+    let fitness = 0;
+    for (let i = 0; i < 5; i++) {
+        const enemyX = 300 + Math.random() * 200;
+        fitness += simulateShot(net, enemyX);
+    }
+    return fitness / 5;
+}
+
+function evolveStep(population) {
+    const scored = population.map((net) => ({ net, score: evaluate(net) }));
+    scored.sort((a, b) => b.score - a.score);
+    const best = scored[0].net;
+    const survivors = scored.slice(0, POPULATION / 2).map((s) => s.net);
+    const nextPop = survivors.map(cloneNet);
+    while (nextPop.length < POPULATION) {
+        const parent = cloneNet(
+            survivors[Math.floor(Math.random() * survivors.length)],
+        );
+        mutate(parent);
+        nextPop.push(parent);
+    }
+    return { best, nextPop, score: scored[0].score };
+}
+
+function evolve(populationSize = POPULATION, generations = 50) {
+    let population = Array.from({ length: populationSize }, createRandomNet);
+    if (bestNet) population[0] = cloneNet(bestNet);
+    let genBest = bestNet ? cloneNet(bestNet) : population[0];
+    let genScore = bestNet ? bestScore : evaluate(genBest);
+    for (let g = 0; g < generations; g++) {
+        const result = evolveStep(population);
+        population = result.nextPop;
+        if (result.score > genScore) {
+            genScore = result.score;
+            genBest = cloneNet(result.best);
+        }
+        console.log(
+            `Generation ${g + 1}: best fitness = ${result.score.toFixed(2)}, overall best = ${genScore.toFixed(2)}`,
+        );
+        population[0] = cloneNet(genBest);
+    }
+    bestNet = cloneNet(genBest);
+    bestScore = genScore;
+    trainedNet = cloneNet(genBest);
+    return genBest;
+}
+
+let trainingPopulation = null;
+let trainingGen = 0;
+
+function startBackgroundTraining() {
+    trainingGen = 0;
+    trainingPopulation = [];
+    if (trainedNet) {
+        bestNet = cloneNet(trainedNet);
+        bestScore = evaluate(trainedNet);
+        for (let i = 0; i < POPULATION; i++) {
+            const net = cloneNet(trainedNet);
+            if (i !== 0) mutate(net);
+            trainingPopulation.push(net);
+        }
+    } else {
+        trainingPopulation = Array.from({ length: POPULATION }, createRandomNet);
+        bestNet = cloneNet(trainingPopulation[0]);
+        bestScore = evaluate(bestNet);
+    }
+    const trainStep = () => {
+        const result = evolveStep(trainingPopulation);
+        trainingPopulation = result.nextPop;
+        if (result.score > bestScore) {
+            bestScore = result.score;
+            bestNet = cloneNet(result.best);
+        }
+        trainedNet = cloneNet(bestNet);
+        trainingPopulation[0] = cloneNet(bestNet);
+        trainingGen++;
+        if (tanks) {
+            tanks.forEach((t) => {
+                if (t.ai) t.aiNet = cloneNet(bestNet);
+            });
+        }
+        console.log(
+            `Background generation ${trainingGen} complete, best fitness = ${result.score.toFixed(2)}, overall best = ${bestScore.toFixed(2)}`,
+        );
+    };
+    setInterval(trainStep, TRAINING_INTERVAL);
 }
 
 let canvas,
@@ -476,9 +614,14 @@ if (typeof module !== 'undefined') {
         neuralDecision,
         GRAVITY,
         loadTrainedNet,
+        evolve,
+        startBackgroundTraining,
     };
 } else {
     window.onload = () => {
-        loadTrainedNet().then(init);
+        loadTrainedNet().then(() => {
+            init();
+            startBackgroundTraining();
+        });
     };
 }
