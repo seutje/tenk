@@ -47,6 +47,34 @@ const WEAPONS = {
     },
 };
 
+// Generate a random neural network for an AI tank
+function createRandomNet() {
+    const rand = () => Math.random() * 2 - 1; // range [-1, 1]
+    const hiddenWeights = Array.from({ length: 3 }, () =>
+        Array.from({ length: 5 }, rand),
+    );
+    const hiddenBias = Array.from({ length: 3 }, () => rand() / 2);
+    const outputWeights = Array.from({ length: 7 }, () =>
+        Array.from({ length: 3 }, rand),
+    );
+    const outputBias = Array.from({ length: 7 }, () => rand() / 2);
+    return { hiddenWeights, hiddenBias, outputWeights, outputBias };
+}
+
+function neuralDecision(net, inputs) {
+    const hidden = net.hiddenWeights.map((w, i) =>
+        Math.tanh(w.reduce((s, wt, j) => s + wt * inputs[j], net.hiddenBias[i])),
+    );
+    const out = net.outputWeights.map((w, i) =>
+        w.reduce((s, wt, j) => s + wt * hidden[j], net.outputBias[i]),
+    );
+    const angle = Math.max(0, Math.min(180, (out[0] + 1) * 90));
+    const power = Math.max(0.3, Math.min(1, (out[1] + 1) / 2));
+    const weaponIndex = out.slice(2).indexOf(Math.max(...out.slice(2)));
+    const weapon = Object.keys(WEAPONS)[weaponIndex];
+    return { angle, power, weapon };
+}
+
 let canvas,
     ctx,
     terrain,
@@ -106,6 +134,8 @@ function createTanks() {
             alive: true,
             color: colors[i],
             ai: !!i,
+            sensors: { front: 0, back: 0, enemy: 0 },
+            aiNet: i ? createRandomNet() : null,
         });
     }
     placeTanks();
@@ -177,6 +207,7 @@ function playerFire() {
 function makeAIDecision(id) {
     const tank = tanks[id];
     if (!tank.alive) return;
+    updateSensors(tank);
     const targets = tanks.filter((t) => t.id !== id && t.alive);
     if (!targets.length) return;
     const target = targets.reduce((a, b) =>
@@ -184,17 +215,14 @@ function makeAIDecision(id) {
     );
     const dx = target.x - tank.x;
     const dy = target.y - tank.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    let angle = (Math.atan2(-dy, dx) * 180) / Math.PI;
-    angle = Math.max(0, Math.min(180, angle));
-    const power = Math.min(
-        1,
-        Math.max(0.3, dist / 500 + (Math.random() - 0.5) * 0.2),
-    );
-    const weapon =
-        Object.keys(WEAPONS)[
-            Math.floor(Math.random() * Object.keys(WEAPONS).length)
-        ];
+    const inputs = [
+        dx / canvas.width,
+        dy / canvas.height,
+        tank.sensors.front,
+        tank.sensors.back,
+        tank.sensors.enemy,
+    ];
+    const { angle, power, weapon } = neuralDecision(tank.aiNet, inputs);
     aiDecisions.push({ tank, weapon, angle, power });
 }
 
@@ -260,6 +288,23 @@ function getTerrainHeight(x) {
         }
     }
     return canvas.height - GROUND_HEIGHT;
+}
+
+function updateSensors(tank) {
+    const base = getTerrainHeight(tank.x);
+    const front = getTerrainHeight(tank.x + 20);
+    const back = getTerrainHeight(tank.x - 20);
+    tank.sensors.front = (front - base) / 50;
+    tank.sensors.back = (back - base) / 50;
+    const others = tanks.filter((t) => t.id !== tank.id && t.alive);
+    if (others.length) {
+        const dist = Math.min(
+            ...others.map((o) => Math.hypot(o.x - tank.x, o.y - tank.y)),
+        );
+        tank.sensors.enemy = dist / canvas.width;
+    } else {
+        tank.sensors.enemy = 1;
+    }
 }
 
 function updateProjectiles() {
