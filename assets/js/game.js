@@ -252,7 +252,7 @@ class Tank {
     }
     
     takeDamage(amount, sourceId) {
-        this.health -= amount;
+        this.health = Math.round(this.health - amount);
         this.lastDamage = amount;
         
         if (sourceId === this.id) {
@@ -392,7 +392,7 @@ class Projectile {
     }
     
     destroyTerrain(x, y) {
-        const destroyRadius = 20 + this.damage / 5;
+        const destroyRadius = 50 + this.damage / 5;
         
         for (let i = 0; i < terrain.length; i++) {
             const distance = Math.sqrt(
@@ -430,9 +430,20 @@ class Projectile {
             x: this.x,
             y: this.y,
             radius: 0,
-            maxRadius: 15 + this.damage / 5,
+            maxRadius: 30 + this.damage / 5,
             alpha: 1
         };
+
+        // Apply splash damage
+        tanks.forEach(tank => {
+            if (tank.alive) {
+                const distance = Math.sqrt(Math.pow(tank.x + TANK_WIDTH / 2 - explosion.x, 2) + Math.pow(tank.y - TANK_HEIGHT / 2 - explosion.y, 2));
+                if (distance < explosion.maxRadius) {
+                    const damage = (1 - distance / explosion.maxRadius) * this.damage;
+                    tank.takeDamage(damage, this.ownerId);
+                }
+            }
+        });
         
         const animateExplosion = () => {
             explosion.radius += 2;
