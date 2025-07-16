@@ -50,9 +50,9 @@ const WEAPONS = {
 // Simple neural network weights for AI decision making
 const AI_NET = {
     hiddenWeights: [
-        [0.4, -0.3, 0.1, -0.1],
-        [-0.2, 0.6, 0.05, 0.05],
-        [0.1, 0.2, -0.1, 0.1],
+        [0.4, -0.3, 0.1, -0.1, 0],
+        [-0.2, 0.6, 0.05, 0.05, 0],
+        [0.1, 0.2, -0.1, 0.1, 0],
     ],
     hiddenBias: [0.1, -0.1, 0.05],
     outputWeights: [
@@ -142,7 +142,7 @@ function createTanks() {
             alive: true,
             color: colors[i],
             ai: !!i,
-            sensors: { front: 0, back: 0 },
+            sensors: { front: 0, back: 0, enemy: 0 },
         });
     }
     placeTanks();
@@ -227,6 +227,7 @@ function makeAIDecision(id) {
         dy / canvas.height,
         tank.sensors.front,
         tank.sensors.back,
+        tank.sensors.enemy,
     ];
     const { angle, power, weapon } = neuralDecision(inputs);
     aiDecisions.push({ tank, weapon, angle, power });
@@ -302,6 +303,15 @@ function updateSensors(tank) {
     const back = getTerrainHeight(tank.x - 20);
     tank.sensors.front = (front - base) / 50;
     tank.sensors.back = (back - base) / 50;
+    const others = tanks.filter((t) => t.id !== tank.id && t.alive);
+    if (others.length) {
+        const dist = Math.min(
+            ...others.map((o) => Math.hypot(o.x - tank.x, o.y - tank.y)),
+        );
+        tank.sensors.enemy = dist / canvas.width;
+    } else {
+        tank.sensors.enemy = 1;
+    }
 }
 
 function updateProjectiles() {
