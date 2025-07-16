@@ -399,4 +399,9 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-window.onload = init;
+if (typeof module !== 'undefined') {
+    // Export for testing in Node environment
+    module.exports = { WEAPONS };
+} else {
+    window.onload = init;
+}
