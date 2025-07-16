@@ -254,6 +254,17 @@ class Tank {
 }
 
 // Projectile class
+function getTerrainY(x) {
+    if (!Number.isFinite(x)) {
+        return canvas.height;
+    }
+
+    const index = Math.floor((x / canvas.width) * TERRAIN_POINTS);
+    if (index < 0 || index >= terrain.length) return canvas.height;
+    return terrain[index].y;
+}
+
+// Projectile class
 class Projectile {
     constructor(x, y, vx, vy, damage, ownerId) {
         this.x = x;
@@ -273,7 +284,7 @@ class Projectile {
         this.vy += GRAVITY;
         
         // Check terrain collision
-        const terrainY = this.getTerrainY(this.x);
+        const terrainY = getTerrainY(this.x);
         if (this.y >= terrainY) {
             this.explode();
             this.destroyTerrain(this.x, terrainY);
@@ -296,12 +307,6 @@ class Projectile {
         });
     }
     
-    getTerrainY(x) {
-        const index = Math.floor((x / canvas.width) * TERRAIN_POINTS);
-        if (index < 0 || index >= terrain.length) return canvas.height;
-        return terrain[index].y;
-    }
-    
     destroyTerrain(x, y) {
         const destroyRadius = 20 + this.damage / 5;
         
@@ -319,7 +324,7 @@ class Projectile {
         // Update tank positions based on new terrain
         tanks.forEach(tank => {
             if (tank.alive) {
-                tank.y = this.getTerrainY(tank.x + TANK_WIDTH/2);
+                tank.y = getTerrainY(tank.x + TANK_WIDTH/2);
             }
         });
         
@@ -599,6 +604,16 @@ function toggleSpeed() {
     document.getElementById('speedDisplay').textContent = gameSpeed + 'x';
 }
 
-// Start game
-initGame();
-gameLoop();
+// Start game in browser environment
+if (typeof window !== 'undefined' && !process.env.JEST_WORKER_ID) {
+    initGame();
+    gameLoop();
+}
+
+// Export functions for testing in Node environment
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        generateTerrain,
+        getTerrainY
+    };
+}

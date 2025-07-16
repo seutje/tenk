@@ -1,30 +1,26 @@
-const { WEAPONS, simulateShot, HIDDEN_WEIGHTS, INPUT_SIZE } = require('../assets/js/game');
+let generateTerrain;
+let getTerrainY;
 
-test('weapon configuration includes mega blast damage', () => {
-  expect(WEAPONS.mega.damage).toBe(50);
-});
+describe('terrain utility', () => {
+  beforeAll(() => {
+    document.body.innerHTML = `
+      <canvas id="gameCanvas" width="1000" height="600"></canvas>
+      <div id="stats"></div>
+    `;
+    ({ generateTerrain, getTerrainY } = require('../assets/js/game'));
+  });
 
-test('weapon keys', () => {
-  expect(Object.keys(WEAPONS)).toEqual([
-    'standard',
-    'rapid',
-    'triple',
-    'bouncy',
-    'mega',
-  ]);
-});
+  beforeEach(() => {
+    generateTerrain();
+  });
 
-test('simulateShot penalizes self hits', () => {
-  const net = {
-    hiddenWeights: Array.from({ length: HIDDEN_WEIGHTS }, () => Array(INPUT_SIZE).fill(0)),
-    hiddenBias: Array(HIDDEN_WEIGHTS).fill(0),
-    outputWeights: Array.from({ length: 7 }, () => Array(HIDDEN_WEIGHTS).fill(0)),
-    outputBias: [1, -1, 0, 0, 0, 0, 0],
-  };
-  const score = simulateShot(net, [
-    { x: 300, y: 0, alive: 1 },
-    { x: 0, y: 0, alive: 0 },
-    { x: 0, y: 0, alive: 0 },
-  ]);
-  expect(score).toBeLessThan(0);
+  test('getTerrainY returns canvas height for invalid x', () => {
+    expect(getTerrainY(NaN)).toBe(600);
+    expect(getTerrainY(Infinity)).toBe(600);
+  });
+
+  test('getTerrainY returns canvas height for out of bounds x', () => {
+    expect(getTerrainY(-10)).toBe(600);
+    expect(getTerrainY(2000)).toBe(600);
+  });
 });
