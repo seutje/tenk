@@ -41,6 +41,7 @@ let particles = [];
 
 // Neural network storage
 let globalBestModel = null;
+let globalBestFitness = -Infinity;
 let trainingPool = [];
 const TRAINING_ITERATIONS = 500; // increased from 10 for faster background training
 
@@ -491,6 +492,7 @@ function simulateTraining() {
     }
 
     let generationBest = -Infinity;
+    let generationBestBrain = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
 
     // Run simulation battles for training
     for (let sim = 0; sim < TRAINING_ITERATIONS; sim++) {
@@ -537,14 +539,17 @@ function simulateTraining() {
         // Update training pool with best performers
         simTanks.sort((a, b) => b.fitness - a.fitness);
         trainingPool[Math.floor(Math.random() * trainingPool.length)].copyFrom(simTanks[0].brain);
-        if (simTanks[0].fitness > generationBest) generationBest = simTanks[0].fitness;
+        if (simTanks[0].fitness > generationBest) {
+            generationBest = simTanks[0].fitness;
+            generationBestBrain.copyFrom(simTanks[0].brain);
+        }
     }
 
     // Update global best model
-    globalBestModel.copyFrom(trainingPool.reduce((best, current) => {
-        // Simple fitness evaluation for training pool
-        return Math.random() > 0.5 ? current : best;
-    }));
+    if (generationBest > globalBestFitness) {
+        globalBestFitness = generationBest;
+        globalBestModel.copyFrom(generationBestBrain);
+    }
 
     return generationBest;
 }
@@ -558,7 +563,6 @@ function trainCLI(generations = 500) {
         trainingPool = Array(50).fill().map(() => new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE));
     }
 
-    let globalBestFitness = -Infinity;
     for (let g = 0; g < generations; g++) {
         const genBest = simulateTraining();
         trainingPool.forEach(net => net.mutate());
