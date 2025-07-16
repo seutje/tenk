@@ -153,7 +153,7 @@ function neuralDecision(net, inputs) {
 }
 
 // ==== Training Functions ====
-const POPULATION = 20;
+const POPULATION = 100;
 const MUTATION_RATE = 0.1;
 const MUTATION_STRENGTH = 0.5;
 const TRAINING_INTERVAL = 250; // faster background evolution
@@ -268,7 +268,7 @@ function evolveStep(population) {
     return { best, nextPop, score: scored[0].score };
 }
 
-function evolve(populationSize = POPULATION, generations = 50) {
+function evolve(populationSize = POPULATION, generations = 2000) {
     let population = Array.from({ length: populationSize }, createRandomNet);
     if (bestNet) population[0] = cloneNet(bestNet);
     let genBest = bestNet ? cloneNet(bestNet) : population[0];
