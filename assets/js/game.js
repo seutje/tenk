@@ -1,6 +1,7 @@
 // Game constants
 const GRAVITY = 0.2;
 const TURN_TIME = 30;
+const DEMO_TURN_TIME = 1;
 const GROUND_HEIGHT = 50;
 const TANK_WIDTH = 40;
 const TANK_HEIGHT = 20;
@@ -365,13 +366,14 @@ function bindUI() {
 
 function startTurn() {
     if (gameOver) return;
-    timer = TURN_TIME;
+    const turnTime = hasPlayer ? TURN_TIME : DEMO_TURN_TIME;
+    timer = turnTime;
     turnInProgress = false;
     aiDecisions = [];
     const interval = setInterval(() => {
         timer -= 0.1;
         document.getElementById("timerFill").style.width =
-            (timer / TURN_TIME) * 100 + "%";
+            (timer / turnTime) * 100 + "%";
         if (timer <= 0) {
             clearInterval(interval);
             hasPlayer && tanks[0].alive ? playerFire() : processAITurn();
