@@ -5,8 +5,9 @@ const DEMO_TURN_TIME = 1;
 const GROUND_HEIGHT = 100;
 const TANK_WIDTH = 40;
 const TANK_HEIGHT = 20;
-const HIDDEN_WEIGHTS = 13;
-const INPUT_SIZE = 8;
+const ENEMY_COUNT = 3;
+const INPUT_SIZE = 2 + 4 + ENEMY_COUNT * 3;
+const HIDDEN_WEIGHTS = INPUT_SIZE + 5;
 const DEFAULT_TERRAIN_AMPLITUDE = 70;
 const DEFAULT_TERRAIN_FREQUENCY = 0.5;
 let currentAmplitude = DEFAULT_TERRAIN_AMPLITUDE;
@@ -199,11 +200,39 @@ function getTrainingTerrainHeight(terrain, x, width = 800) {
     return terrain[terrain.length - 1].y;
 }
 
-function simulateShot(net, enemyX, terrain = generateTrainingTerrain()) {
+function simulateShot(net, enemies, terrain = generateTrainingTerrain()) {
     const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
     const amp = terrain.amplitude || DEFAULT_TERRAIN_AMPLITUDE;
     const freq = terrain.frequency || DEFAULT_TERRAIN_FREQUENCY;
-    const inputs = [enemyX / 800, 0, amp / 100, freq, 0, 0, enemyX / 800, 0];
+    const width = 800;
+    const height = 600;
+    const selfX = 0;
+    const selfY = getTrainingTerrainHeight(terrain, selfX, width);
+
+    const normalizedEnemies = enemies.map((e) => ({
+        x: e.x / width,
+        y: e.y / height,
+        alive: e.alive ? 1 : 0,
+    }));
+    const nearest = enemies
+        .filter((e) => e.alive)
+        .reduce(
+            (a, b) =>
+                Math.abs(a.x - selfX) < Math.abs(b.x - selfX) ? a : b,
+            enemies[0],
+        );
+    const dx = nearest.x - selfX;
+    const dy = nearest.y - selfY;
+
+    const inputs = [
+        dx / width,
+        dy / height,
+        amp / 100,
+        freq,
+        selfX / width,
+        selfY / height,
+        ...normalizedEnemies.flatMap((e) => [e.x, e.y, e.alive]),
+    ];
     const { angle, power, weapon } = nn.decide(inputs);
     const rad = (angle * Math.PI) / 180;
     const w = WEAPONS[weapon];
@@ -211,10 +240,8 @@ function simulateShot(net, enemyX, terrain = generateTrainingTerrain()) {
     let vx = Math.cos(rad) * speed;
     let vy = -Math.sin(rad) * speed;
 
-    const width = 800;
-    const height = 600;
-    let x = 0;
-    let y = getTrainingTerrainHeight(terrain, 0, width);
+    let x = selfX;
+    let y = selfY;
 
     while (x >= 0 && x <= width && y <= height) {
         vy += GRAVITY;
@@ -227,12 +254,18 @@ function simulateShot(net, enemyX, terrain = generateTrainingTerrain()) {
         }
     }
 
-    const dist = Math.abs(x - enemyX);
-    const selfDist = Math.abs(x);
+    let dist = Infinity;
     let damage = 0;
-    if (dist <= w.radius) {
-        damage = w.damage * (1 - dist / w.radius);
+    for (const e of enemies) {
+        if (!e.alive) continue;
+        const d = Math.abs(x - e.x);
+        if (d < dist) dist = d;
+        if (d <= w.radius) {
+            const cur = w.damage * (1 - d / w.radius);
+            if (cur > damage) damage = cur;
+        }
     }
+    const selfDist = Math.abs(x - selfX);
     let selfDamage = 0;
     if (selfDist <= w.radius) {
         selfDamage = w.damage * (1 - selfDist / w.radius);
@@ -245,9 +278,13 @@ function evaluate(net) {
     const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
     let fitness = 0;
     for (let i = 0; i < 5; i++) {
-        const enemyX = 300 + Math.random() * 200;
         const terrain = generateTrainingTerrain();
-        fitness += simulateShot(nn, enemyX, terrain);
+        const enemies = Array.from({ length: ENEMY_COUNT }, () => {
+            const x = Math.random() * 800;
+            const y = getTrainingTerrainHeight(terrain, x, 800);
+            return { x, y, alive: 1 };
+        });
+        fitness += simulateShot(nn, enemies, terrain);
     }
     return fitness / 5;
 }
@@ -413,7 +450,17 @@ function createTanks(player = true) {
             alive: true,
             color: colors[i],
             ai: !isPlayer,
-            sensors: { amplitude: 0, frequency: 0, selfX: 0, selfY: 0, enemyX: 0, enemyY: 0 },
+            sensors: {
+                amplitude: 0,
+                frequency: 0,
+                selfX: 0,
+                selfY: 0,
+                enemies: Array.from({ length: ENEMY_COUNT }, () => ({
+                    x: 0,
+                    y: 0,
+                    alive: 0,
+                })),
+            },
             aiNet: !isPlayer
                 ? trainedNet
                     ? trainedNet.clone()
@@ -500,6 +547,7 @@ function makeAIDecision(id) {
     );
     const dx = target.x - tank.x;
     const dy = target.y - tank.y;
+    const enemyInputs = tank.sensors.enemies.flatMap((e) => [e.x, e.y, e.alive]);
     const inputs = [
         dx / canvas.width,
         dy / canvas.height,
@@ -507,8 +555,7 @@ function makeAIDecision(id) {
         tank.sensors.frequency,
         tank.sensors.selfX,
         tank.sensors.selfY,
-        tank.sensors.enemyX,
-        tank.sensors.enemyY,
+        ...enemyInputs,
     ];
     const { angle, power, weapon } = neuralDecision(tank.aiNet, inputs);
     aiDecisions.push({ tank, weapon, angle, power });
@@ -583,16 +630,18 @@ function updateSensors(tank) {
     tank.sensors.frequency = currentFrequency;
     tank.sensors.selfX = tank.x / canvas.width;
     tank.sensors.selfY = tank.y / canvas.height;
-    const others = tanks.filter((t) => t.id !== tank.id && t.alive);
-    if (others.length) {
-        const enemy = others.reduce((a, b) =>
-            Math.hypot(a.x - tank.x, a.y - tank.y) < Math.hypot(b.x - tank.x, b.y - tank.y) ? a : b,
-        );
-        tank.sensors.enemyX = enemy.x / canvas.width;
-        tank.sensors.enemyY = enemy.y / canvas.height;
-    } else {
-        tank.sensors.enemyX = 0;
-        tank.sensors.enemyY = 0;
+    const others = tanks.filter((t) => t.id !== tank.id).sort((a, b) => a.id - b.id);
+    for (let i = 0; i < ENEMY_COUNT; i++) {
+        const enemy = others[i];
+        if (enemy && enemy.alive) {
+            tank.sensors.enemies[i].x = enemy.x / canvas.width;
+            tank.sensors.enemies[i].y = enemy.y / canvas.height;
+            tank.sensors.enemies[i].alive = 1;
+        } else {
+            tank.sensors.enemies[i].x = 0;
+            tank.sensors.enemies[i].y = 0;
+            tank.sensors.enemies[i].alive = 0;
+        }
     }
 }
 
