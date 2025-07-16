@@ -164,20 +164,58 @@ function mutate(net) {
     nn.mutate();
 }
 
-function simulateShot(net, enemyX) {
+function generateTrainingTerrain(width = 800, height = 600) {
+    const terrain = [];
+    const segments = Math.floor(width / 10);
+    const base = height - GROUND_HEIGHT;
+    for (let i = 0; i <= segments; i++) {
+        const x = i * 10;
+        const y = base - Math.sin(i * 0.5) * 70 - Math.random() * 20;
+        terrain.push({ x, y });
+    }
+    return terrain;
+}
+
+function getTrainingTerrainHeight(terrain, x, width = 800) {
+    if (x < 0) x = 0;
+    if (x > width) x = width;
+    for (let i = 0; i < terrain.length - 1; i++) {
+        if (x >= terrain[i].x && x <= terrain[i + 1].x) {
+            const r = (x - terrain[i].x) / (terrain[i + 1].x - terrain[i].x);
+            return terrain[i].y + r * (terrain[i + 1].y - terrain[i].y);
+        }
+    }
+    return terrain[terrain.length - 1].y;
+}
+
+function simulateShot(net, enemyX, terrain = generateTrainingTerrain()) {
     const nn = net instanceof NeuralNetwork ? net : NeuralNetwork.from(net);
     const inputs = [enemyX / 800, 0, 0, 0, 0, 0, enemyX / 800, 0];
     const { angle, power, weapon } = nn.decide(inputs);
     const rad = (angle * Math.PI) / 180;
     const w = WEAPONS[weapon];
     const speed = w.speed * power;
-    const vx = Math.cos(rad) * speed;
-    const vy = Math.sin(rad) * speed;
-    const t = (vy * 2) / GRAVITY;
-    const landingX = vx * t;
-    const dist = Math.abs(landingX - enemyX);
-    // distance from the firing tank's position at x=0
-    const selfDist = Math.abs(landingX);
+    let vx = Math.cos(rad) * speed;
+    let vy = Math.sin(rad) * speed;
+
+    const width = 800;
+    const height = 600;
+    let x = 0;
+    let y = getTrainingTerrainHeight(terrain, 0, width);
+
+    while (x >= 0 && x <= width && y <= height) {
+        vy += GRAVITY;
+        x += vx;
+        y += vy;
+        const ground = getTrainingTerrainHeight(terrain, x, width);
+        if (y >= ground) {
+            y = ground;
+            break;
+        }
+    }
+
+    const dist = Math.abs(x - enemyX);
+    const selfDist = Math.abs(x);
     let damage = 0;
     if (dist <= w.radius) {
         damage = w.damage * (1 - dist / w.radius);
@@ -195,7 +233,8 @@ function evaluate(net) {
     let fitness = 0;
     for (let i = 0; i < 5; i++) {
         const enemyX = 300 + Math.random() * 200;
-        fitness += simulateShot(nn, enemyX);
+        const terrain = generateTrainingTerrain();
+        fitness += simulateShot(nn, enemyX, terrain);
     }
     return fitness / 5;
 }
