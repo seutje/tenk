@@ -271,6 +271,9 @@ function init(player = true) {
     document.getElementById("controls").style.display = hasPlayer
         ? "block"
         : "none";
+    document.getElementById("timerBar").style.display = hasPlayer
+        ? "block"
+        : "none";
     if (!loopStarted) {
         gameLoop();
         loopStarted = true;
