@@ -376,6 +376,10 @@ function draw() {
             ctx.fillRect(t.x - t.width / 2, t.y - t.height, t.width, t.height);
             ctx.fillStyle = "#000";
             ctx.fillRect(t.x - 2, t.y - t.height - 10, 4, 10);
+            ctx.fillStyle = "#000";
+            ctx.font = "12px 'Courier New', monospace";
+            ctx.textAlign = "center";
+            ctx.fillText(t.name, t.x, t.y - t.height + 12);
         }
     });
     ctx.fillStyle = "#00ff00";
