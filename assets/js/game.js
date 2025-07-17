@@ -35,6 +35,7 @@ const TANK_WIDTH = 40;
 const TANK_HEIGHT = 25;
 const GRAVITY = 0.2;
 const MAX_POWER = 20;
+const DIRECT_HIT_BONUS = 30; // Additional reward for direct hits during training
 
 // Game objects
 const gameState = {
@@ -430,6 +431,10 @@ class Projectile {
                     stepX >= tank.x && stepX <= tank.x + TANK_WIDTH &&
                     stepY >= tank.y - TANK_HEIGHT && stepY <= tank.y) {
                     tank.takeDamage(this.damage, this.ownerId);
+                    const owner = gameState.tanks.find(t => t.id === this.ownerId);
+                    if (owner && owner.id !== tank.id) {
+                        owner.fitness += DIRECT_HIT_BONUS;
+                    }
                     this.x = stepX;
                     this.y = stepY;
                     this.explode();
