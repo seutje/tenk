@@ -36,9 +36,12 @@ const GRAVITY = 0.2;
 const MAX_POWER = 20;
 
 // Game objects
-let tanks = [];
-let projectiles = [];
-let particles = [];
+const gameState = {
+    tanks: [],
+    projectiles: [],
+    particles: [],
+    splashVisuals: []
+};
 
 // Neural network storage
 let globalBestModel = null;
@@ -197,7 +200,7 @@ class Tank {
         const inputs = [
             this.x,
             this.y,
-            ...tanks.filter(t => t.id !== this.id).flatMap(t => [t.x, t.y, t.alive ? 1 : 0]),
+            ...gameState.tanks.filter(t => t.id !== this.id).flatMap(t => [t.x, t.y, t.alive ? 1 : 0]),
             terrainFreq,
             terrainAmp
         ];
@@ -223,7 +226,7 @@ class Tank {
         
         if (this.weapon === 0) {
             // Standard shell
-            projectiles.push(new Projectile(
+            gameState.projectiles.push(new Projectile(
                 barrelTipX,
                 barrelTipY,
                 velocity.x,
@@ -240,7 +243,7 @@ class Tank {
                     x: Math.cos(spreadAngle) * this.power,
                     y: Math.sin(spreadAngle) * this.power
                 };
-                projectiles.push(new Projectile(
+                gameState.projectiles.push(new Projectile(
                     barrelTipX,
                     barrelTipY,
                     spreadVelocity.x,
@@ -260,7 +263,7 @@ class Tank {
             this.fitness -= amount * 2; // Penalty for self-damage
         } else {
             this.fitness += amount; // Reward when damaged by others
-            const source = tanks.find(t => t.id === sourceId);
+            const source = gameState.tanks.find(t => t.id === sourceId);
             if (source) {
                 source.fitness += amount * 1.5; // Bonus for dealing damage
             }
@@ -274,7 +277,7 @@ class Tank {
         // Add damage particles
         if (typeof requestAnimationFrame === 'function' && !isTraining) {
             for (let i = 0; i < 5; i++) {
-                particles.push(new Particle(
+                gameState.particles.push(new Particle(
                     this.x + TANK_WIDTH/2 + (Math.random() - 0.5) * TANK_WIDTH,
                     this.y - TANK_HEIGHT/2,
                     (Math.random() - 0.5) * 5,
@@ -325,8 +328,7 @@ function getTerrainY(x) {
         return canvas.height;
     }
 
-    if (x < 0) return terrain[0].y;
-    if (x > canvas.width) return terrain[terrain.length - 1].y;
+    if (x < 0 || x > canvas.width) return canvas.height;
 
     const index = Math.floor((x / canvas.width) * TERRAIN_POINTS);
     if (index < 0 || index >= terrain.length) return canvas.height;
@@ -372,7 +374,7 @@ class Projectile {
                 break;
             }
 
-            for (const tank of tanks) {
+            for (const tank of gameState.tanks) {
                 if (tank.alive &&
                     stepX >= tank.x && stepX <= tank.x + TANK_WIDTH &&
                     stepY >= tank.y - TANK_HEIGHT && stepY <= tank.y) {
@@ -413,7 +415,7 @@ class Projectile {
         }
         
         // Update tank positions based on new terrain
-        tanks.forEach(tank => {
+        gameState.tanks.forEach(tank => {
             if (tank.alive) {
                 tank.y = getTerrainY(tank.x + TANK_WIDTH/2);
             }
@@ -422,7 +424,7 @@ class Projectile {
         // Add explosion particles
         if (typeof requestAnimationFrame === 'function' && !isTraining) {
             for (let i = 0; i < 10; i++) {
-                particles.push(new Particle(
+                gameState.particles.push(new Particle(
                     x + (Math.random() - 0.5) * destroyRadius * 2,
                     y + (Math.random() - 0.5) * destroyRadius * 2,
                     (Math.random() - 0.5) * 10,
@@ -439,14 +441,16 @@ class Projectile {
             x: this.x,
             y: this.y,
             radius: 0,
-            maxRadius: 30 + this.damage / 5,
+            maxRadius: 70 + this.damage / 5,
             alpha: 1
         };
 
         // Apply splash damage
-        tanks.forEach(tank => {
+        gameState.tanks.forEach(tank => {
             if (tank.alive) {
-                const distance = Math.sqrt(Math.pow(tank.x + TANK_WIDTH / 2 - explosion.x, 2) + Math.pow(tank.y - TANK_HEIGHT / 2 - explosion.y, 2));
+                const tankCenterX = tank.x + TANK_WIDTH / 2;
+                const tankCenterY = tank.y - TANK_HEIGHT / 2;
+                const distance = Math.sqrt(Math.pow(tankCenterX - explosion.x, 2) + Math.pow(tankCenterY - explosion.y, 2));
                 if (distance < explosion.maxRadius) {
                     const damage = (1 - distance / explosion.maxRadius) * this.damage;
                     tank.takeDamage(damage, this.ownerId);
@@ -455,25 +459,29 @@ class Projectile {
         });
         
         if (typeof requestAnimationFrame === 'function' && !isTraining) {
-            const animateExplosion = () => {
-                explosion.radius += 2;
-                explosion.alpha -= 0.05;
-                
-                if (explosion.alpha > 0) {
-                    requestAnimationFrame(animateExplosion);
-                }
-                
-                ctx.save();
-                ctx.globalAlpha = explosion.alpha;
-                ctx.fillStyle = '#ff6600';
-                ctx.beginPath();
-                ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-            };
-            
-            animateExplosion();
+            gameState.splashVisuals.push(new SplashDamageVisual(explosion.x, explosion.y, explosion.maxRadius));
         }
+    }
+    
+    draw() {
+        const elapsed = Date.now() - this.startTime;
+        const progress = elapsed / this.duration;
+
+        if (progress >= 1) {
+            return false; // Indicate that this visual is done
+        }
+
+        const currentRadius = this.maxRadius * progress;
+        const alpha = 1 - progress; // Fade out
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = 'rgba(255, 69, 0, 0.7)'; // Fire color (OrangeRed with some transparency)
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, currentRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return true; // Indicate that this visual is still active
     }
     
     draw() {
@@ -483,6 +491,38 @@ class Projectile {
         ctx.beginPath();
         ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
         ctx.fill();
+    }
+}
+
+// New class for splash damage visualization
+class SplashDamageVisual {
+    constructor(x, y, maxRadius) {
+        this.x = x;
+        this.y = y;
+        this.maxRadius = maxRadius;
+        this.startTime = Date.now();
+        this.duration = 1000; // 1 second
+    }
+
+    draw() {
+        const elapsed = Date.now() - this.startTime;
+        const progress = elapsed / this.duration;
+
+        if (progress >= 1) {
+            return false; // Indicate that this visual is done
+        }
+
+        const currentRadius = this.maxRadius * progress;
+        const alpha = 1 - progress; // Fade out
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = 'rgba(255, 69, 0, 0.7)'; // Fire color (OrangeRed with some transparency)
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, currentRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return true; // Indicate that this visual is still active
     }
 }
 
@@ -505,8 +545,8 @@ class Particle {
         this.life--;
         
         if (this.life <= 0) {
-            const index = particles.indexOf(this);
-            if (index > -1) particles.splice(index, 1);
+            const index = gameState.particles.indexOf(this);
+            if (index > -1) gameState.particles.splice(index, 1);
         }
     }
     
@@ -524,9 +564,10 @@ class Particle {
 // Initialize game
 function initGame() {
     generateTerrain();
-    tanks = [];
-    projectiles = [];
-    particles = [];
+    gameState.tanks = [];
+    gameState.projectiles = [];
+    gameState.particles = [];
+    gameState.splashVisuals = [];
     
     const colors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44'];
     const minDistance = 100;
@@ -540,7 +581,7 @@ function initGame() {
             y = getTerrainY(x + TANK_WIDTH / 2);
 
             let tooClose = false;
-            for (const existingTank of tanks) {
+            for (const existingTank of gameState.tanks) {
                 if (Math.abs(x - existingTank.x) < minDistance) {
                     tooClose = true;
                     break;
@@ -559,8 +600,8 @@ function initGame() {
             y = getTerrainY(x + TANK_WIDTH / 2);
         }
         
-        tanks.push(new Tank(x, y, colors[i], i + 1));
-        tanks[i].updateBrain();
+        gameState.tanks.push(new Tank(x, y, colors[i], i + 1));
+        gameState.tanks[i].updateBrain();
     }
     
     // Initialize training pool
@@ -586,8 +627,8 @@ function simulateTraining() {
 
         for (let i = 0; i < evaluationRounds; i++) {
             // Store original game state
-            const originalTanks = tanks;
-            const originalProjectiles = projectiles;
+            const originalTanks = gameState.tanks;
+            const originalProjectiles = gameState.projectiles;
             const originalTerrain = terrain;
 
             // Setup simulation environment
@@ -608,21 +649,21 @@ function simulateTraining() {
                 otherTank.brain.copyFrom(randomBrain);
             });
 
-            tanks = simTanks;
-            projectiles = [];
+            gameState.tanks = simTanks;
+            gameState.projectiles = [];
 
             // Run simulation for a fixed number of frames or until the game ends
             const maxFrames = 1800; // 30 seconds
             for (let frame = 0; frame < maxFrames; frame++) {
                 if (frame % 60 === 0) {
-                    tanks.forEach(tank => tank.think());
-                    tanks.forEach(tank => tank.fire());
+                    gameState.tanks.forEach(tank => tank.think());
+                    gameState.tanks.forEach(tank => tank.fire());
                 }
 
-                projectiles.forEach(p => p.update());
-                projectiles = projectiles.filter(p => p.active);
+                gameState.projectiles.forEach(p => p.update());
+                gameState.projectiles = gameState.projectiles.filter(p => p.active);
 
-                const aliveTanks = tanks.filter(t => t.alive);
+                const aliveTanks = gameState.tanks.filter(t => t.alive);
                 if (aliveTanks.length <= 1) {
                     // Award bonus for survival
                     aliveTanks.forEach(tank => tank.fitness += 50);
@@ -633,8 +674,8 @@ function simulateTraining() {
             totalFitness += mainTank.fitness;
 
             // Restore original game state
-            tanks = originalTanks;
-            projectiles = originalProjectiles;
+            gameState.tanks = originalTanks;
+            gameState.projectiles = originalProjectiles;
             terrain = originalTerrain;
         }
         
@@ -716,30 +757,33 @@ function gameLoop() {
         ctx.fill();
         
         // Update and draw particles
-        particles.forEach(p => {
+        gameState.particles.forEach(p => {
             p.update();
             p.draw();
         });
+
+        // Update and draw splash visuals
+        gameState.splashVisuals = gameState.splashVisuals.filter(visual => visual.draw());
         
         // Tank decision phase every 60 frames
         if (frameCount % 60 === 0) {
-            tanks.forEach(tank => tank.think());
+            gameState.tanks.forEach(tank => tank.think());
             
             // All tanks fire at once
-            tanks.forEach(tank => tank.fire());
+            gameState.tanks.forEach(tank => tank.fire());
         }
         
         // Update and draw projectiles
-        projectiles.forEach(p => {
+        gameState.projectiles.forEach(p => {
             p.update();
             p.draw();
         });
         
         // Remove inactive projectiles
-        projectiles = projectiles.filter(p => p.active);
+        gameState.projectiles = gameState.projectiles.filter(p => p.active);
         
         // Draw tanks
-        tanks.forEach(tank => tank.draw());
+        gameState.tanks.forEach(tank => tank.draw());
         
         // Update stats
         if (frameCount % 30 === 0) {
@@ -749,12 +793,12 @@ function gameLoop() {
         // Training simulation
         if (frameCount % 300 === 0) {
             simulateTraining();
-            tanks.forEach(tank => tank.updateBrain());
+            gameState.tanks.forEach(tank => tank.updateBrain());
             generation++;
         }
         
         // Check for game end
-        const aliveTanks = tanks.filter(t => t.alive);
+        const aliveTanks = gameState.tanks.filter(t => t.alive);
         if (aliveTanks.length <= 1 && frameCount > 60) {
             resetGame();
         }
@@ -769,7 +813,7 @@ function updateStats() {
     const statsDiv = document.getElementById('stats');
     statsDiv.innerHTML = '';
     
-    tanks.forEach(tank => {
+    gameState.tanks.forEach(tank => {
         const div = document.createElement('div');
         div.className = 'tank-stats';
         div.innerHTML = `
@@ -823,6 +867,11 @@ if (typeof module !== 'undefined' && module.exports) {
         generateTerrain,
         getTerrainY,
         initGame,
-        trainCLI
+        trainCLI,
+        Tank,
+        Projectile,
+        gameState,
+        TANK_WIDTH,
+        TANK_HEIGHT
     };
 }
