@@ -48,6 +48,7 @@ let globalBestModel = null;
 let globalBestFitness = -Infinity;
 let trainingPool = [];
 let topBrains = [];
+let loadedBrains = [];
 const TRAINING_ITERATIONS = 500; // increased from 10 for faster background training
 
 function loadTrainedNet() {
@@ -58,12 +59,30 @@ function loadTrainedNet() {
                 if (data) globalBestModel = NeuralNetwork.fromJSON(data);
             })
             .catch(() => {});
+
+        // Load tank specific brains
+        for (let i = 1; i <= 4; i++) {
+            fetch(`tank${i}.json`)
+                .then(res => (res.ok ? res.json() : null))
+                .then(data => {
+                    if (data) loadedBrains[i - 1] = NeuralNetwork.fromJSON(data);
+                })
+                .catch(() => {});
+        }
     } else if (typeof require !== 'undefined') {
         try {
             const fs = require('fs');
             if (fs.existsSync('trained_net.json')) {
                 const data = JSON.parse(fs.readFileSync('trained_net.json', 'utf8'));
                 globalBestModel = NeuralNetwork.fromJSON(data);
+            }
+
+            // Load tank specific brains
+            for (let i = 1; i <= 4; i++) {
+                if (fs.existsSync(`tank${i}.json`)) {
+                    const data = JSON.parse(fs.readFileSync(`tank${i}.json`, 'utf8'));
+                    loadedBrains[i - 1] = NeuralNetwork.fromJSON(data);
+                }
             }
         } catch (e) {}
     }
@@ -608,7 +627,9 @@ function initGame() {
         }
         
         gameState.tanks.push(new Tank(x, y, colors[i], i + 1));
-        if (topBrains[i]) {
+        if (loadedBrains[i]) {
+            gameState.tanks[i].brain.copyFrom(loadedBrains[i]);
+        } else if (topBrains[i]) {
             gameState.tanks[i].brain.copyFrom(topBrains[i]);
         } else {
             gameState.tanks[i].updateBrain(); // Fallback to random or global best
@@ -776,8 +797,11 @@ function trainCLI(generations = 10) {
 
     if (typeof require !== 'undefined') {
         const fs = require('fs');
-        fs.writeFileSync('trained_net.json', JSON.stringify(globalBestModel.toJSON(), null, 2));
-        console.log('Saved weights to trained_net.json');
+        // Save top 4 brains
+        for (let i = 0; i < Math.min(4, topBrains.length); i++) {
+            fs.writeFileSync(`tank${i + 1}.json`, JSON.stringify(topBrains[i].toJSON(), null, 2));
+            console.log(`Saved tank${i + 1}.json`);
+        }
     }
 }
 
