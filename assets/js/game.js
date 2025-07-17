@@ -910,9 +910,10 @@ function updateStats() {
         <h3>Game Info</h3>
         <p>Generation: ${generation}</p>
         <p>Frame: ${frameCount}</p>
+        <p>Wind: ${(wind * 100).toFixed(1)}</p>
+        ${globalBestFitness > -Infinity ? `<p>Top Fitness: ${globalBestFitness.toFixed(2)}</p>` : ''}
         <p>Terrain Freq: ${terrainFreq.toFixed(3)}</p>
         <p>Terrain Amp: ${terrainAmp.toFixed(0)}</p>
-        <p>Wind: ${(wind * 100).toFixed(1)}</p>
     `;
     statsDiv.appendChild(infoDiv);
 }
