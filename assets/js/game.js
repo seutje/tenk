@@ -19,7 +19,7 @@ let wind = 0;
 
 // Neural Network parameters
 const INPUT_SIZE = 14;
-const HIDDEN_SIZE = 20;
+const HIDDEN_SIZE = 15;
 const OUTPUT_SIZE = 3;
 const LEARNING_RATE = 0.1;
 const MUTATION_RATE = 0.1;
