@@ -684,7 +684,7 @@ function simulateTraining(isCLI = false) {
             gameState.projectiles = [];
 
             // Run simulation for a fixed number of frames or until the game ends
-            const maxFrames = 1800; // 30 seconds
+            const maxFrames = 600; // 10 seconds
             for (let frame = 0; frame < maxFrames; frame++) {
                 if (frame % 60 === 0) {
                     shuffleArray(gameState.tanks);
