@@ -47,6 +47,7 @@ const gameState = {
 let globalBestModel = null;
 let globalBestFitness = -Infinity;
 let trainingPool = [];
+let topBrains = [];
 const TRAINING_ITERATIONS = 500; // increased from 10 for faster background training
 
 function loadTrainedNet() {
@@ -608,7 +609,11 @@ function initGame() {
         }
         
         gameState.tanks.push(new Tank(x, y, colors[i], i + 1));
-        gameState.tanks[i].updateBrain();
+        if (topBrains[i]) {
+            gameState.tanks[i].brain.copyFrom(topBrains[i]);
+        } else {
+            gameState.tanks[i].updateBrain(); // Fallback to random or global best
+        }
     }
     
     // Initialize training pool
@@ -725,6 +730,9 @@ function simulateTraining(isCLI = false) {
         globalBestFitness = generationBestFitness;
         globalBestModel.copyFrom(generationBestBrain);
     }
+    
+    // Store top 4 brains
+    topBrains = fitnessScores.slice(0, 4).map(score => score.brain);
     
     isTraining = false;
     return { bestFitness: generationBestFitness, bestBrain: generationBestBrain };
