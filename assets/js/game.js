@@ -811,6 +811,8 @@ function trainCLI(generations = 10) {
 
     if (typeof require !== 'undefined') {
         const fs = require('fs');
+        fs.writeFileSync('trained_net.json', JSON.stringify(globalBestModel.toJSON(), null, 2));
+-       console.log('Saved weights to trained_net.json');
         // Save top 4 brains
         for (let i = 0; i < Math.min(4, topBrains.length); i++) {
             fs.writeFileSync(`tank${i + 1}.json`, JSON.stringify(topBrains[i].toJSON(), null, 2));
