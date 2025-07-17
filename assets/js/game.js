@@ -788,8 +788,21 @@ function simulateTraining(isCLI = false) {
     
     // Store top 4 brains
     topBrains = fitnessScores.slice(0, 4).map(score => score.brain);
-    
+
     isTraining = false;
+    if (!isCLI) {
+        const newPool = [];
+        const eliteBrain = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+        eliteBrain.copyFrom(globalBestModel);
+        newPool.push(eliteBrain);
+        while (newPool.length < trainingPool.length) {
+            const newNet = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+            newNet.copyFrom(globalBestModel);
+            newNet.mutate(MUTATION_RATE);
+            newPool.push(newNet);
+        }
+        trainingPool = newPool;
+    }
     return { bestFitness: generationBestFitness, bestBrain: generationBestBrain };
 }
 
