@@ -232,10 +232,25 @@ class Tank {
     think() {
         if (!this.alive) return;
         
+        // Always provide data for exactly 3 enemies, padding with zeros if necessary
+        const enemies = gameState.tanks.filter(t => t.id !== this.id);
+        const enemyData = [];
+        
+        // Add data for up to 3 enemies
+        for (let i = 0; i < 3; i++) {
+            if (i < enemies.length) {
+                const enemy = enemies[i];
+                enemyData.push(enemy.x, enemy.y, enemy.alive ? 1 : 0);
+            } else {
+                // Pad with zeros for missing enemies
+                enemyData.push(0, 0, 0);
+            }
+        }
+        
         const inputs = [
             this.x,
             this.y,
-            ...gameState.tanks.filter(t => t.id !== this.id).flatMap(t => [t.x, t.y, t.alive ? 1 : 0]),
+            ...enemyData,
             terrainFreq,
             terrainAmp,
             wind
