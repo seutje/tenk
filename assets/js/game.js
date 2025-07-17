@@ -270,7 +270,6 @@ class Tank {
         if (sourceId === this.id) {
             this.fitness -= amount * 2; // Penalty for self-damage
         } else {
-            this.fitness += amount; // Reward when damaged by others
             const source = gameState.tanks.find(t => t.id === sourceId);
             if (source) {
                 source.fitness += amount * 1.5; // Bonus for dealing damage
