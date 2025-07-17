@@ -15,9 +15,10 @@ let isPaused = false;
 let generation = 1;
 let frameCount = 0;
 let isTraining = false;
+let wind = 0;
 
 // Neural Network parameters
-const INPUT_SIZE = 13;
+const INPUT_SIZE = 14;
 const HIDDEN_SIZE = 20;
 const OUTPUT_SIZE = 3;
 const LEARNING_RATE = 0.1;
@@ -90,6 +91,11 @@ function loadTrainedNet() {
 
 loadTrainedNet();
 
+function updateWind() {
+    // Wind can range from -0.1 to 0.1, affecting projectile horizontal speed
+    wind = (Math.random() - 0.5) * 0.2;
+}
+
 // Initialize terrain
 function generateTerrain() {
     terrain = [];
@@ -134,9 +140,11 @@ class NeuralNetwork {
     forward(inputs) {
         // Normalize inputs
         const normalizedInputs = inputs.map((val, idx) => {
-            if (idx < 12) return val / canvas.width; // Positions
-            if (idx === 12) return val / 0.035; // Frequency, corrected max
-            return val / 200; // Amplitude
+            if (idx < 11) return val / canvas.width; // Tank data (positions, alive status)
+            if (idx === 11) return val / 0.035; // terrainFreq
+            if (idx === 12) return val / 200; // terrainAmp
+            if (idx === 13) return val / 0.2; // wind
+            return val;
         });
 
         // Hidden layer
@@ -229,7 +237,8 @@ class Tank {
             this.y,
             ...gameState.tanks.filter(t => t.id !== this.id).flatMap(t => [t.x, t.y, t.alive ? 1 : 0]),
             terrainFreq,
-            terrainAmp
+            terrainAmp,
+            wind
         ];
         
         const outputs = this.brain.forward(inputs);
@@ -380,6 +389,7 @@ class Projectile {
         const prevY = this.y;
 
         this.vy += GRAVITY;
+        this.vx += wind;
         const nextX = this.x + this.vx;
         const nextY = this.y + this.vy;
 
@@ -589,6 +599,7 @@ class Particle {
 
 // Initialize game
 function initGame() {
+    updateWind();
     generateTerrain();
     gameState.tanks = [];
     gameState.projectiles = [];
@@ -662,6 +673,7 @@ function simulateTraining(isCLI = false) {
             const originalTanks = gameState.tanks;
             const originalProjectiles = gameState.projectiles;
             const originalTerrain = terrain;
+            const originalWind = wind;
 
             // Setup simulation environment
             generateTerrain();
@@ -711,7 +723,8 @@ function simulateTraining(isCLI = false) {
             // Run simulation for a fixed number of frames or until the game ends
             const maxFrames = 600; // 10 seconds
             for (let frame = 0; frame < maxFrames; frame++) {
-                if (frame % 60 === 0) {
+                if (frame % 60 === 0 && gameState.projectiles.length === 0) {
+                    wind = (Math.random() - 0.5) * 0.2;
                     shuffleArray(gameState.tanks);
                     gameState.tanks.forEach(tank => tank.think());
                     gameState.tanks.forEach(tank => tank.fire());
@@ -734,6 +747,7 @@ function simulateTraining(isCLI = false) {
             gameState.tanks = originalTanks;
             gameState.projectiles = originalProjectiles;
             terrain = originalTerrain;
+            wind = originalWind;
         }
         
         return { fitness: totalFitness / evaluationRounds, brain };
@@ -756,7 +770,7 @@ function simulateTraining(isCLI = false) {
     
     isTraining = false;
     return { bestFitness: generationBestFitness, bestBrain: generationBestBrain };
-}""
+}
 
 function trainCLI(generations = 10) {
     if (!globalBestModel) {
@@ -829,7 +843,8 @@ function gameLoop() {
         gameState.splashVisuals = gameState.splashVisuals.filter(visual => visual.draw());
         
         // Tank decision phase every 60 frames
-        if (frameCount % 60 === 0) {
+        if (frameCount % 60 === 0 && gameState.projectiles.length === 0) {
+            updateWind();
             gameState.tanks.forEach(tank => tank.think());
             
             // All tanks fire at once
@@ -897,6 +912,7 @@ function updateStats() {
         <p>Frame: ${frameCount}</p>
         <p>Terrain Freq: ${terrainFreq.toFixed(3)}</p>
         <p>Terrain Amp: ${terrainAmp.toFixed(0)}</p>
+        <p>Wind: ${(wind * 100).toFixed(1)}</p>
     `;
     statsDiv.appendChild(infoDiv);
 }
