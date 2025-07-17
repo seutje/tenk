@@ -169,6 +169,13 @@ class NeuralNetwork {
     }
 }
 
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
 // Tank class
 class Tank {
     constructor(x, y, color, id) {
@@ -635,9 +642,33 @@ function simulateTraining(isCLI = false) {
             generateTerrain();
             const simTanks = [];
             const colors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44'];
+            const minDistance = 100; // Define minDistance here
             for (let j = 0; j < 4; j++) {
-                const x = (j + 1) * canvas.width / 5 - TANK_WIDTH / 2;
-                const y = getTerrainY(x);
+                let x, y;
+                let placed = false;
+                for (let attempt = 0; attempt < 100; attempt++) {
+                    x = Math.random() * (canvas.width - TANK_WIDTH);
+                    y = getTerrainY(x + TANK_WIDTH / 2);
+
+                    let tooClose = false;
+                    for (const existingTank of simTanks) {
+                        if (Math.abs(x - existingTank.x) < minDistance) {
+                            tooClose = true;
+                            break;
+                        }
+                    }
+
+                    if (!tooClose) {
+                        placed = true;
+                        break;
+                    }
+                }
+
+                if (!placed) {
+                    // Fallback to default positioning if random placement fails after maxAttempts
+                    x = (j + 1) * canvas.width / 5 - TANK_WIDTH / 2;
+                    y = getTerrainY(x + TANK_WIDTH / 2);
+                }
                 simTanks.push(new Tank(x, y, colors[j], j + 1));
             }
 
@@ -656,6 +687,7 @@ function simulateTraining(isCLI = false) {
             const maxFrames = 1800; // 30 seconds
             for (let frame = 0; frame < maxFrames; frame++) {
                 if (frame % 60 === 0) {
+                    shuffleArray(gameState.tanks);
                     gameState.tanks.forEach(tank => tank.think());
                     gameState.tanks.forEach(tank => tank.fire());
                 }
