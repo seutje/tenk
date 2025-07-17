@@ -36,6 +36,7 @@ const TANK_HEIGHT = 25;
 const GRAVITY = 0.2;
 const MAX_POWER = 20;
 const DIRECT_HIT_BONUS = 30; // Additional reward for direct hits during training
+const SELF_DAMAGE_PENALTY_MULTIPLIER = 3; // Increased penalty for self-inflicted damage
 
 // Game objects
 const gameState = {
@@ -312,7 +313,7 @@ class Tank {
         this.lastDamage = amount;
         
         if (sourceId === this.id) {
-            this.fitness -= amount * 2; // Penalty for self-damage
+            this.fitness -= amount * SELF_DAMAGE_PENALTY_MULTIPLIER; // Increased penalty for self-damage
         } else {
             const source = gameState.tanks.find(t => t.id === sourceId);
             if (source) {
