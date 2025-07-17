@@ -365,10 +365,10 @@ class Tank {
         ctx.restore();
         
         // Draw tank ID
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = 'black';
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(`Tank ${this.id}`, this.x + TANK_WIDTH/2, this.y + 15);
+        ctx.fillText(`Tank ${this.id}`, this.x + TANK_WIDTH/2, this.y - TANK_HEIGHT/2 - 30);
     }
 }
 
