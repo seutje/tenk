@@ -92,8 +92,8 @@ function loadTrainedNet() {
 loadTrainedNet();
 
 function updateWind() {
-    // Wind can range from -0.1 to 0.1, affecting projectile horizontal speed
-    wind = (Math.random() - 0.5) * 0.2;
+    // Wind can range from -0.05 to 0.05, affecting projectile horizontal speed
+    wind = (Math.random() - 0.5) * 0.1;
 }
 
 // Initialize terrain
