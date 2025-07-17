@@ -207,7 +207,7 @@ class Tank {
         
         const outputs = this.brain.forward(inputs);
         
-        this.angle = (outputs[0] - 0.5) * Math.PI;
+        this.angle = (outputs[0] * 2 - 1) * Math.PI;
         this.power = outputs[1] * MAX_POWER;
         this.weapon = outputs[2] > 0.5 ? 1 : 0;
     }
