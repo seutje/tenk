@@ -18,8 +18,8 @@ let isTraining = false;
 let wind = 0;
 
 // Neural Network parameters
-const INPUT_SIZE = 14;
-const HIDDEN_SIZE = 15;
+const INPUT_SIZE = 8;  // Reduced for 2 tanks: 2 (self) + 3 (enemy) + 3 (env) = 8
+const HIDDEN_SIZE = 12; // Optimized for 2-tank setup
 const OUTPUT_SIZE = 3;
 const LEARNING_RATE = 0.1;
 const MUTATION_RATE = 0.1;
@@ -64,7 +64,7 @@ function loadTrainedNet() {
             .catch(() => {});
 
         // Load tank specific brains
-        for (let i = 1; i <= 4; i++) {
+        for (let i = 1; i <= 2; i++) {
             fetch(`tank${i}.json`)
                 .then(res => (res.ok ? res.json() : null))
                 .then(data => {
@@ -81,7 +81,7 @@ function loadTrainedNet() {
             }
 
             // Load tank specific brains
-            for (let i = 1; i <= 4; i++) {
+            for (let i = 1; i <= 2; i++) {
                 if (fs.existsSync(`tank${i}.json`)) {
                     const data = JSON.parse(fs.readFileSync(`tank${i}.json`, 'utf8'));
                     loadedBrains[i - 1] = NeuralNetwork.fromJSON(data);
@@ -234,19 +234,17 @@ class Tank {
     think() {
         if (!this.alive) return;
         
-        // Always provide data for exactly 3 enemies, padding with zeros if necessary
+        // Provide data for exactly 1 enemy (since we have 2 tanks total)
         const enemies = gameState.tanks.filter(t => t.id !== this.id);
         const enemyData = [];
         
-        // Add data for up to 3 enemies
-        for (let i = 0; i < 3; i++) {
-            if (i < enemies.length) {
-                const enemy = enemies[i];
-                enemyData.push(enemy.x, enemy.y, enemy.alive ? 1 : 0);
-            } else {
-                // Pad with zeros for missing enemies
-                enemyData.push(0, 0, 0);
-            }
+        // Add data for the single enemy
+        if (enemies.length > 0) {
+            const enemy = enemies[0];
+            enemyData.push(enemy.x, enemy.y, enemy.alive ? 1 : 0);
+        } else {
+            // Pad with zeros if no enemy (shouldn't happen with 2 tanks)
+            enemyData.push(0, 0, 0);
         }
         
         const inputs = [
@@ -627,11 +625,11 @@ function initGame() {
     gameState.particles = [];
     gameState.splashVisuals = [];
     
-    const colors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44'];
-    const minDistance = 100;
+    const colors = ['#ff4444', '#44ff44'];
+    const minDistance = 200; // Increased for better spacing with 2 tanks
     const maxAttempts = 100;
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 2; i++) {
         let x, y;
         let placed = false;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -699,9 +697,9 @@ function simulateTraining(isCLI = false) {
             // Setup simulation environment
             generateTerrain();
             const simTanks = [];
-            const colors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44'];
-            const minDistance = 100; // Define minDistance here
-            for (let j = 0; j < 4; j++) {
+            const colors = ['#ff4444', '#44ff44'];
+            const minDistance = 200; // Increased for better spacing with 2 tanks
+            for (let j = 0; j < 2; j++) {
                 let x, y;
                 let placed = false;
                 for (let attempt = 0; attempt < 100; attempt++) {
@@ -786,8 +784,8 @@ function simulateTraining(isCLI = false) {
         globalBestModel.copyFrom(generationBestBrain);
     }
     
-    // Store top 4 brains
-    topBrains = fitnessScores.slice(0, 4).map(score => score.brain);
+    // Store top 2 brains
+    topBrains = fitnessScores.slice(0, 2).map(score => score.brain);
 
     isTraining = false;
     if (!isCLI) {
@@ -847,8 +845,8 @@ function trainCLI(generations = 10) {
         const fs = require('fs');
         fs.writeFileSync('trained_net.json', JSON.stringify(globalBestModel.toJSON(), null, 2));
 -       console.log('Saved weights to trained_net.json');
-        // Save top 4 brains
-        for (let i = 0; i < Math.min(4, topBrains.length); i++) {
+        // Save top 2 brains
+        for (let i = 0; i < Math.min(2, topBrains.length); i++) {
             fs.writeFileSync(`tank${i + 1}.json`, JSON.stringify(topBrains[i].toJSON(), null, 2));
             console.log(`Saved tank${i + 1}.json`);
         }
