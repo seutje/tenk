@@ -611,8 +611,8 @@ function initGame() {
 }
 
 // Training simulation
-function simulateTraining() {
-    isTraining = true;
+function simulateTraining(isCLI = false) {
+    isTraining = !isCLI;
 
     if (!globalBestModel) {
         globalBestModel = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
@@ -708,7 +708,7 @@ function trainCLI(generations = 10) {
     }
 
     for (let g = 0; g < generations; g++) {
-        const { bestFitness, bestBrain } = simulateTraining();
+        const { bestFitness, bestBrain } = simulateTraining(true);
 
         if (bestFitness > globalBestFitness) {
             globalBestFitness = bestFitness;
@@ -792,7 +792,7 @@ function gameLoop() {
         
         // Training simulation
         if (frameCount % 300 === 0) {
-            simulateTraining();
+            simulateTraining(false);
             gameState.tanks.forEach(tank => tank.updateBrain());
             generation++;
         }
